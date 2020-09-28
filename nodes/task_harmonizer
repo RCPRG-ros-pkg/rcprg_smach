@@ -37,10 +37,11 @@ class TaskHarmonizer:
         self.current_subprocess = None
         self.current_task = None
         self.current_task_cmd = None
-
         print 'ConversationMachine.__init__: waiting for rico_says ActionServer...'
-        self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
-        self.rico_says_client.wait_for_server()
+        sim_mode = str(rospy.get_param('/sim_mode'))
+        if sim_mode == 'real':
+            self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
+            self.rico_says_client.wait_for_server()
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
 
     def hasTaskSpecByIntent(self, intent_name):
