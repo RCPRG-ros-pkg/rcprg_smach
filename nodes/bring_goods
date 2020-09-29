@@ -70,7 +70,7 @@ class MainSM(smach_rcprg.StateMachine):
                 ('q_current_task',  'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
-            ])
+            ],sim_mode)
         self.conversation_interface.start()
 
         self.userdata.goal = goods_name_m

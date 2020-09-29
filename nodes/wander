@@ -49,7 +49,7 @@ class MainSM(smach_rcprg.StateMachine):
         # Create conversation interface that is shared between all states and SMs.
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
                 ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
-            ])
+            ],sim_mode)
         self.conversation_interface.start()
 
         with self:

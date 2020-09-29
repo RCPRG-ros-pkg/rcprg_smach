@@ -3,7 +3,7 @@
     <arg name="sim_mode" />
 
     <!-- actionlib servers -->
-    <node name="velma_task_harmonizer" pkg="rcprg_smach" type="task_harmonizer" respawn="false" output="screen" >
+    <node name="task_harmonizer" pkg="rcprg_smach" type="task_harmonizer" respawn="false" output="screen" >
     </node>
 
     <param name="/kb_places_xml" type="string" value="$(find velmobil_navigation)/map/places.xml" />

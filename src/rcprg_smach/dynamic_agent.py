@@ -101,7 +101,7 @@ class DynAgent:
     def connectionCheckThread(self, args):
         while not self.finished:
             active_ros_nodes = get_node_names()
-            if not '/rico_task_harmonizer' in active_ros_nodes:
+            if not '/task_harmonizer' in active_ros_nodes:
                 print 'DynAgent "' + self.name + '" received has detected the task_harmonizer is dead'
                 self.finished = True
                 self.main_sm.shutdownRequest()

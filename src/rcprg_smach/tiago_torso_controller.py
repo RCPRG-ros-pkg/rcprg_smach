@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# encoding: utf8
 import copy
 import threading
 import rospy
@@ -30,9 +32,10 @@ class SetHeight(smach_rcprg.State):
             return 'ok'
 
         current_height = self.torso_controller.get_torso_height()
-
         if current_height is None:
-            return 'error'
+            rospy.sleep(2)
+            if current_height is None:
+                return 'error'
 
         if abs(current_height - userdata.torso_height) > 0.05:
             self.torso_controller.set_torso_height(userdata.torso_height)

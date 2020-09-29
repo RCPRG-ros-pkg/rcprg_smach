@@ -167,8 +167,9 @@ class ConversationMachine:
         print 'Rico says (blocking): "' + text + '"'
         goal = tiago_msgs.msg.SaySentenceGoal()
         goal.sentence = text
-        self.rico_says_client.send_goal(goal)
-        self.rico_says_client.wait_for_result()
+        if self.__sim_mode == 'real':
+            self.rico_says_client.send_goal(goal)
+            self.rico_says_client.wait_for_result()
         print 'Rico says (blocking) finished'
 
     # Starts speaking a sentence, returns id for polling

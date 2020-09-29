@@ -62,11 +62,11 @@ class MainSM(smach_rcprg.StateMachine):
 
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
                 ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
-                ('q_load',        'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
+                ('q_load',        'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507')
                 #('ack',           'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
                 #('ack_i_took',    'projects/incare-dialog-agent/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b'),
                 #('ack_i_gave',    'projects/incare-dialog-agent/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629'),
-            ])
+            ],sim_mode)
         self.conversation_interface.start()
 
         with self:
