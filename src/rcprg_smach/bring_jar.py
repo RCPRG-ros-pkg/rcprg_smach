@@ -8,6 +8,7 @@ from threading import Thread
 
 from moveit_msgs.msg import AttachedCollisionObject, CollisionObject
 from shape_msgs.msg import SolidPrimitive
+import tf_conversions.posemath as pm
 
 import smach_rcprg
 import navigation
@@ -45,11 +46,9 @@ class SetBaseDestination(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
         smach_rcprg.State.__init__(self, input_keys=['dest_name'], output_keys=['goal_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
-
         self.conversation_interface = conversation_interface
 
         self.description = u'Znajduje cel ruchu'
-
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
@@ -76,7 +75,7 @@ class BringJar(smach_rcprg.StateMachine):
         self.userdata.lowest_height = 0.0
 
         self.description = u'Podaję rzecz'
-        worker = VelmaTaskExecutor()
+        worker = manipulation.VelmaTaskExecutor()
         object1 = AttachedCollisionObject()
         object1.link_name = "left_HandGripLink"
         object1.object.header.frame_id = "left_HandGripLink"
