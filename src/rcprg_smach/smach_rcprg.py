@@ -14,11 +14,18 @@ class StateMachine(smach.StateMachine):
 
 class State(smach.State):
     def __init__(self, outcomes=[], input_keys=[], output_keys=[], io_keys=[]):
+        self._userdata = None
         smach.State.__init__(self, outcomes=outcomes,
                                         input_keys=input_keys,
                                         output_keys=output_keys,
                                         io_keys=io_keys)
         self.__shutdown__ = False
 
+    def execute(self, userdata):
+        self._userdata = userdata
+        return self.transition_function(userdata)
+        
+    def transition_function(self, userdata):
+        pass
     def shutdownRequest(self):
         self.__shutdown__ = True
