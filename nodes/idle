@@ -13,7 +13,7 @@ import rcprg_smach.navigation
 import rcprg_smach.smach_rcprg as smach_rcprg
 from rcprg_smach.dynamic_agent import DynAgent
 
-import tiago_kb.places_xml as kb_p
+import rcprg_kb.places_xml as kb_p
 
 from rcprg_smach.task_manager import PoseDescription
 
