@@ -24,14 +24,15 @@ NAVIGATION_MAX_TIME_S = 100
 
 
 def makePose(x, y, theta):
-    q = quaternion_from_euler(theta, 0, 0)
+    q = quaternion_from_euler(0, 0, theta)
     result = Pose()
     result.position.x = x
     result.position.y = y
-    result.orientation.w = q[0]
-    result.orientation.x = q[1]
-    result.orientation.y = q[2]
-    result.orientation.z = q[3]
+    result.orientation.x = q[0]
+    result.orientation.y = q[1]
+    result.orientation.z = q[2]
+    result.orientation.w = q[3]
+    print result
     return result
 
 class RememberCurrentPose(smach_rcprg.State):
@@ -53,7 +54,7 @@ class RememberCurrentPose(smach_rcprg.State):
         self.current_pose = copy.copy(data)
         self.__lock__.release()
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if self.sim_mode == 'sim':
@@ -98,7 +99,7 @@ class UnderstandGoal(smach_rcprg.State):
 
         self.description = u'Próbuję zrozumieć zadany cel'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         #assert isinstance( userdata.goal_pose, PoseDescription )
@@ -160,9 +161,22 @@ class UnderstandGoal(smach_rcprg.State):
                 if pl.getType() == 'point':
                     pt_dest = pl.getPt()
                     norm = pl.getN()
-                    angle_dest = -math.atan2(norm[1], norm[0])
-                    pt = pt_dest
-                    pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
+                    if pl.isDestinationFace():
+                        print "HUMAN"
+                        print "NORM: ", norm
+                        angle_dest = -math.atan2(norm[1], -norm[0])
+                        print "angle_dest: ", angle_dest
+                        pt = pt_dest
+                        pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
+                        print "pt_dest: ", pt_dest
+                    else:
+                        print "NO HUMAN"
+                        print "NORM: ", norm
+                        angle_dest = math.atan2(norm[1], norm[0])
+                        print "angle_dest: ", angle_dest
+                        pt = pt_dest
+                        pt_dest = (pt_dest[0], pt_dest[1])
+                        print "pt_dest: ", pt_dest
                     print 'UnderstandGoal place type: point'
                     print 'pt: {}, pt_dest: {}, norm: {}, angle_dest: {}'.format(pt, pt_dest, norm, angle_dest)
                 elif pl.getType() == 'volumetric':
@@ -204,7 +218,7 @@ class SayImGoingTo(smach_rcprg.State):
 
         self.description = u'Mówię dokąd jadę'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         pose = userdata.move_goal.parameters['pose']
@@ -233,7 +247,7 @@ class SayIdontKnow(smach_rcprg.State):
 
         self.description = u'Mówię, że nie wiem o co chodzi'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.parameters['place_name']
@@ -260,7 +274,7 @@ class SayIArrivedTo(smach_rcprg.State):
 
         self.description = u'Mówię, że dojechałem do celu'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         pose = userdata.move_goal.parameters['pose']
@@ -310,7 +324,7 @@ class SetNavParams(smach_rcprg.State):
 
         self.description = u'Zmieniam parametry ruchu'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if self.sim_mode == 'sim':
@@ -366,7 +380,7 @@ class MoveTo(smach_rcprg.State):
 
         self.description = u'Jadę'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.parameters['place_name']
@@ -510,12 +524,12 @@ class TurnAround(smach_rcprg.State):
 
         self.description = u'Odwracam się'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         pose = userdata.current_pose.parameters['pose']
 
-        theta, beta, alpha = euler_from_quaternion( (pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z) )
+        alpha, beta, theta = euler_from_quaternion( ( pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w) )
         print 'TurnAround current theta: {} {} {}'.format(alpha, beta, theta)
         if theta < 0:
             new_pose = makePose(pose.position.x, pose.position.y, theta+math.pi)
@@ -659,7 +673,7 @@ class ClearCostMaps(smach_rcprg.State):
 
         self.description = u'Czyszczę mapę kosztów'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if not self.clear_costmaps is None:
@@ -715,19 +729,19 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-#    def execute(self, userdata):
+#    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
 #            self.description = u'Gdzieś jadę'
 #        else:
 #            place_name = userdata.goal.parameters['place_name']
 #            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
-#        return super(MoveToComplex, self).execute(userdata)
+#        return super(MoveToComplex, self).transition_function(userdata)
 
 
-#    def execute(self, userdata):
+#    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
 #            self.description = u'Gdzieś jadę'
 #        else:
 #            place_name = userdata.goal.parameters['place_name']
 #            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
-#        return super(MoveToComplexTorsoMid, self).execute(userdata)
+#        return super(MoveToComplexTorsoMid, self).transition_function(userdata)
