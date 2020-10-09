@@ -21,7 +21,7 @@ from shape_msgs.msg import SolidPrimitive
 from geometry_msgs.msg import Pose
 from visualization_msgs.msg import Marker
 import tf_conversions.posemath as pm
-import smach_rcprg
+from TaskER.TaskER import TaskER
 import navigation
 
 
@@ -597,9 +597,9 @@ class VelmaTaskExecutor():
         publisher.publish(stopMsg)
 
 
-class PrepareToMoveBase(smach_rcprg.State):
+class PrepareToMoveBase(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -620,9 +620,9 @@ class PrepareToMoveBase(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class PrepareToMoveWithObject(smach_rcprg.State):
+class PrepareToMoveWithObject(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -643,9 +643,9 @@ class PrepareToMoveWithObject(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class HideHands(smach_rcprg.State):
+class HideHands(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -664,9 +664,9 @@ class HideHands(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class PrepareToGrip(smach_rcprg.State):
+class PrepareToGrip(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=['object_container'], output_keys=['object_container_grab_pose'],
+        TaskER.BlockingState.__init__(self, input_keys=['object_container'], output_keys=['object_container_grab_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -685,9 +685,9 @@ class PrepareToGrip(smach_rcprg.State):
         return 'ok'
 
 
-class OpenDoor(smach_rcprg.State):
+class OpenDoor(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=['object_container_grab_pose','object_container'], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=['object_container_grab_pose','object_container'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -756,9 +756,9 @@ class OpenDoor(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class CorrectBasePose(smach_rcprg.State):
+class CorrectBasePose(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -777,9 +777,9 @@ class CorrectBasePose(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class OpenMore(smach_rcprg.State):
+class OpenMore(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=['object_container_grab_pose'], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=['object_container_grab_pose'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -802,9 +802,9 @@ class OpenMore(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class LookForObject(smach_rcprg.State):
+class LookForObject(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -824,9 +824,9 @@ class LookForObject(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class ApproachObject(smach_rcprg.State):
+class ApproachObject(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -849,9 +849,9 @@ class ApproachObject(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class TakeOutObject(smach_rcprg.State):
+class TakeOutObject(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -917,9 +917,9 @@ class TakeOutObject(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class TakeOutObjectLeft(smach_rcprg.State):
+class TakeOutObjectLeft(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -985,9 +985,9 @@ class TakeOutObjectLeft(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class PutDownObject(smach_rcprg.State):
+class PutDownObject(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -1076,9 +1076,9 @@ class PutDownObject(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class PutDownObjectLeft(smach_rcprg.State):
+class PutDownObjectLeft(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -1228,9 +1228,9 @@ class PutDownObjectLeft(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class EmergencyPutDownObject(smach_rcprg.State):
+class EmergencyPutDownObject(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
-        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
