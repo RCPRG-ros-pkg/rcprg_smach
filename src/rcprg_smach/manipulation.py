@@ -91,8 +91,23 @@ class VelmaTaskExecutor():
             'right_arm_6_joint':0.0,      
             'left_arm_6_joint': 0.0
         }
-
-
+        self.catchingJointState2 = {
+            'torso_0_joint':0,
+            'left_arm_0_joint': -0.0,   
+            'right_arm_0_joint':-0.3,
+            'left_arm_1_joint':1.9,   
+            'right_arm_1_joint':-1.8,
+            'left_arm_2_joint':-1.5,   
+            'right_arm_2_joint':1.25,
+            'left_arm_3_joint':-1.5,   
+            'right_arm_3_joint':0.85,
+            'left_arm_4_joint':0,      
+            'right_arm_4_joint':0,
+            'left_arm_5_joint':1.6,   
+            'right_arm_5_joint':-0.5,
+            'left_arm_6_joint':0.0,      
+            'right_arm_6_joint': 0.0
+        }
         self.acquiringJointState = {
             'torso_0_joint': 0, 
             'right_arm_0_joint': 0.2176005457580103,   
@@ -109,6 +124,24 @@ class VelmaTaskExecutor():
             'left_arm_5_joint': 0.4699180006050142,
             'right_arm_6_joint': -0.21426825617036566, 
             'left_arm_6_joint': -0.0703725749418421,            
+        }
+
+        self.acquiringJointState2 = {
+            'torso_0_joint': 0, 
+            'left_arm_0_joint': -0.2176005457580103,   
+            'right_arm_0_joint': -0.2345004080527655,
+            'left_arm_1_joint': 1.9107791904878497,  
+            'right_arm_1_joint': -1.8034769374904756,
+            'left_arm_2_joint': -1.2409542924753767,   
+            'right_arm_2_joint': 1.1982341925787994,
+            'left_arm_3_joint': -1.4842204142092719,   
+            'right_arm_3_joint': 0.8278483633253793, 
+            'left_arm_4_joint': -0.2525831592128146,   
+            'right_arm_4_joint': -0.07257063733648089,
+            'left_arm_5_joint': 1.5390250000127208,  
+            'right_arm_5_joint': -0.4699180006050142,
+            'left_arm_6_joint': 0.31426825617036566, 
+            'right_arm_6_joint': 0.0703725749418421,            
         }
 
         self.deliveringJointState =  {
@@ -336,6 +369,39 @@ class VelmaTaskExecutor():
         self.setCartesianImpedanceMode()
         return T_B_Cabinet
 
+    def prepareForLeftOpenning(self, destinationFrame):
+        T_Wo_Cabinet = self.velma.getTf("Wo", destinationFrame)
+        T_B_Cabinet = self.velma.getTf("B", destinationFrame)
+
+        cabinetX = T_Wo_Cabinet.p[0]
+        cabinetY = T_Wo_Cabinet.p[1]
+        cabinetZ = T_Wo_Cabinet.p[2]
+
+        torsoAngle = math.atan2(cabinetY, cabinetX)
+        if torsoAngle > math.pi /2:
+            torsoAngle = math.pi /2 - 0.1
+        elif torsoAngle < -math.pi /2:
+            torsoAngle = -math.pi /2 + 0.1
+        else:
+            pass
+
+        desiredJointState = copy.deepcopy(self.acquiringJointState2)
+        desiredJointState["torso_0_joint"] = torsoAngle
+
+        self.velma.moveJoint(desiredJointState, 2.0, start_time=0.5, position_tol=10.0/180.0*math.pi)
+
+        if self.velma.waitForJoint() != 0:
+            raise Exception("Could not move joints")
+
+        rospy.sleep(0.5)
+        lastJointState = self.velma.getLastJointState()
+        if not isConfigurationClose(desiredJointState, lastJointState[1]):
+            raise Exception("Could not acquire desired joint state")
+
+        self.setCartesianImpedanceMode()
+        return T_B_Cabinet
+
+
     def resolveRelativePosition(self, tf, deltaX, deltaY, deltaZ):
         (rotX, rotY, rotZ) = tf.M.GetRPY()
         posX = tf.p.x() + math.cos(rotZ)*deltaX - math.sin(rotZ)*deltaY
@@ -352,11 +418,27 @@ class VelmaTaskExecutor():
         result = self.moveInCartesianImpedanceMode(targetFrame, tol)
         return result
 
+    def moveLeftRelativeToInCartImpMode(self, tf, x, y, z, angle, tol=10):
+        (setpointX, setpointY, setpointZ, setpointYaw) = self.resolveRelativePosition(tf, x, y, z)
+        targetFrame = PyKDL.Frame(PyKDL.Rotation.RPY(0, 0, setpointYaw+angle), PyKDL.Vector(setpointX, setpointY, setpointZ))
+        result = self.moveLeftInCartesianImpedanceMode(targetFrame, tol)
+        return result
+
     def moveInCartesianImpedanceMode(self, T_B_dest, tol=10):
         if not self.velma.moveCartImpRight([T_B_dest], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, tol, tol))):
             raise Exception("Could not move in cartesian impedance mode")
         if self.velma.waitForEffectorRight() != 0:
             if not self.velma.moveCartImpRightCurrentPos(start_time=0.01):
+                raise Exception("Could not make it to given position")
+            return False
+        else:
+            return True
+
+    def moveLeftInCartesianImpedanceMode(self, T_B_dest, tol=10):
+        if not self.velma.moveCartImpLeft([T_B_dest], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, tol, tol))):
+            raise Exception("Could not move in cartesian impedance mode")
+        if self.velma.waitForEffectorLeft() != 0:
+            if not self.velma.moveCartImpLeftCurrentPos(start_time=0.01):
                 raise Exception("Could not make it to given position")
             return False
         else:
@@ -602,29 +684,10 @@ class PrepareToGrip(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class PrepareToGrip(smach_rcprg.State):
-    def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=['object_container'], output_keys=['object_container_grab_pose'],
-                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
-
-        self.conversation_interface = conversation_interface
-
-        self.description = u'Przygotowuję się do chwytu'
-        self.velma_task_executor = velma_task_executor
-    def transition_function(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przygotowuję się do chwytu' )
-        print("Preparing for grip")
-        userdata.object_container_grab_pose = self.velma_task_executor.prepareForGrip(userdata.object_container)
-
-        if self.__shutdown__:
-            return 'shutdown'
-        return 'ok'
 
 class OpenDoor(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
-        smach_rcprg.State.__init__(self, input_keys=['object_container_grab_pose'], output_keys=[],
+        smach_rcprg.State.__init__(self, input_keys=['object_container_grab_pose','object_container'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -646,7 +709,7 @@ class OpenDoor(smach_rcprg.State):
 
         print("Finding the door handle")
         self.velma_task_executor.moveRelativeToInCartImpMode(
-                userdata.object_container_grab_pose, 0.27, -0.37, 0.09, 0.0)
+                userdata.object_container_grab_pose, 0.27, -0.38, 0.09, 0.0)
         # self.velma_task_executor.moveRelativeToInCartImpMode(
         #         userdata.object_container_grab_pose, 0.37, -0.33, 0.09, 0.0)
 
@@ -658,10 +721,36 @@ class OpenDoor(smach_rcprg.State):
         self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
         self.velma_task_executor.moveRelativeToInCartImpMode(
                 userdata.object_container_grab_pose, 0.65, -0.1, 0.09, 0.0)
-        self.velma_task_executor.moveMobileBase(0.0, -0.1, 0.0, 1.5)
+        print("Open a lil bit more")
         self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
         self.velma_task_executor.moveRelativeToInCartImpMode(
-                userdata.object_container_grab_pose, 0.55, 0.1, 0.09, 0.0)
+                userdata.object_container_grab_pose, 0.65, 0, 0.09, 0.0)
+        # self.velma_task_executor.moveMobileBase(0.0, -0.1, 0.0, 1.5)
+
+        # print("Release handle")
+        # self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
+        # self.velma_task_executor.moveRelativeToInCartImpMode(
+        #         userdata.object_container_grab_pose, 0.4, 0.1, 0.09, 0.0)
+        # self.velma_task_executor.moveToStartingPosition()
+
+        print("Prepare Left")
+        object_pose = self.velma_task_executor.prepareForLeftOpenning('object')
+        print("Move Left")
+        if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.2):
+          raise Exception("Could not set CartImp mode for left lwr")
+
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+          raise Exception("Left effector error")
+
+        self.velma_task_executor.setLeftLWRImpedance(1000, 1000, 1000, 1000, 1000, 1000)
+
+        objectTF = self.velma_task_executor.velma.getTf("B", "object")
+        self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.4, 0.15, 0.08, 0)
+        self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.5, -0.1, 0.08, 0)
+        # self.velma_task_executor.moveToStartingPosition()
+        # self.velma_task_executor.setLeftLWRImpedance(300, 300, 900, 200, 200, 200)
+        # self.velma_task_executor.moveLeftRelativeToInCartImpMode(
+        #          userdata.object_container_grab_pose, 0.1, -0.05, 0.09, 0.0)
 
         if self.__shutdown__:
             return 'shutdown'
@@ -683,6 +772,31 @@ class CorrectBasePose(smach_rcprg.State):
         
         self.velma_task_executor.moveToStartingPosition()
         self.velma_task_executor.moveMobileBase(-0.2, 0.0, 0.0, 2.0)
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
+
+class OpenMore(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface, velma_task_executor):
+        smach_rcprg.State.__init__(self, input_keys=['object_container_grab_pose'], output_keys=[],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+        self.description = u'Otwieram drzwi'
+        self.velma_task_executor = velma_task_executor
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Otwieram drzwi' )
+        
+        print("Moving closer to cabinet")
+        self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+                userdata.object_container_grab_pose, -0.3, -0.1, 0.09, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+                userdata.object_container_grab_pose, 0.1, -0.1, 0.09, 0.0)
 
         if self.__shutdown__:
             return 'shutdown'
@@ -725,7 +839,7 @@ class ApproachObject(smach_rcprg.State):
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Podchodzę ramieniem do obiektu' )
         
         
-        self.velma_task_executor.hideHand('right')
+        self.velma_task_executor.hideHand('left')
         print("Moving to grabbing position with planner")
         self.velma_task_executor.setJointImpedanceMode()
         desiredJointState = copy.deepcopy(self.velma_task_executor.catchingJointState)
@@ -768,10 +882,10 @@ class TakeOutObject(smach_rcprg.State):
         self.velma_task_executor.hideHands()
         print("Open hand") # CZEKAJ 
         self.velma_task_executor.openRightHand()
-        rospy.sleep(3.0)
+        rospy.sleep(1.0)
 
         self.velma_task_executor.setRightLWRImpedance(300, 1000, 1000, 2000, 1000, 1000)
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.05, 0.0, 0.08, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.15, 0.0, 0.08, 3.14)
 
         print("Add collision")
         self.marker_publisher.start()
@@ -793,7 +907,7 @@ class TakeOutObject(smach_rcprg.State):
             i= i +1
         objectTF = self.velma_task_executor.velma.getTf("B", "object")
         print("lift")
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.05, 0.03, 0.15, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.18, 0.03, 0.15, 3.14)
            
         print("pull hand back")
         self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.95, 0.03, 0.15, 3.14)
@@ -803,6 +917,73 @@ class TakeOutObject(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
+class TakeOutObjectLeft(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
+        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+        self.description = u'Wyjmuję obiekt'
+        self.velma_task_executor = velma_task_executor
+        self.marker_publisher = marker_publisher
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Wyjmuję obiekt' )
+        
+        print("Grabbing")
+        print("Set cimp mode for left lwr")
+        # self.velma_task_executor.BaseLeftArm()
+
+        if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.2):
+          raise Exception("Could not set CartImp mode for left lwr")
+
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+          raise Exception("Left effector error")
+
+        self.velma_task_executor.setLeftLWRImpedance(1000, 1000, 1000, 1000, 1000, 1000)
+
+        objectTF = self.velma_task_executor.velma.getTf("B", "object")
+        self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.5, 0, 0.08, 0)
+
+        # self.velma_task_executor.hideHands()
+        print("Open hand") # CZEKAJ 
+        self.velma_task_executor.openLeftHand()
+        rospy.sleep(1.0)
+        self.velma_task_executor.setCartesianImpedanceMode()
+        # self.velma_task_executor.setCartesianImpedanceMode()
+        self.velma_task_executor.setLeftLWRImpedance(300, 1000, 1000, 2000, 1000, 1000)
+        self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.1, 0, 0.08, 0)
+
+        print("Add collision")
+        self.marker_publisher.start()
+
+        print("Close hand on object")
+        handDesiredState = dest_q = [74.0/180.0*math.pi, 74.0/180.0*math.pi, 74.0/180.0*math.pi, 0]
+        self.velma_task_executor.velma.moveHandLeft(handDesiredState, [1,1,1,1], [1000, 1000, 1000, 1000], 1000, hold=True)
+        if self.velma_task_executor.velma.waitForHandLeft() != 0:
+          raise Exception("Could not catch with left hand")
+        i=0
+        while i< 5:
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            i= i +1
+        print("lift")
+        self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.1, 0, 0.15, 0)
+           
+        print("pull hand back")
+        self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.75, 0, 0.15, 0)
+        
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
 
 class PutDownObject(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
@@ -818,6 +999,7 @@ class PutDownObject(smach_rcprg.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Odstawiam obiekt' )
+        object_pose = self.velma_task_executor.prepareForLeftOpenning('stolik')
 
         print("Set cimp mode for right lwr")
         if not self.velma_task_executor.velma.moveCartImpRightCurrentPos(start_time=0.2):
@@ -836,7 +1018,7 @@ class PutDownObject(smach_rcprg.State):
         print "The right tool is now in 'grip' pose"
         rospy.sleep(0.5)
 
-        tableTF = self.velma_task_executor.velma.getTf("B", "table")
+        tableTF = self.velma_task_executor.velma.getTf("B", "stolik")
         x = tableTF.p[0]
         y = tableTF.p[1]
         z = tableTF.p[2]
@@ -857,7 +1039,7 @@ class PutDownObject(smach_rcprg.State):
 
 
         print("Put can on the table")
-        BT = PyKDL.Frame(rot, PyKDL.Vector(x-0.20, y, z+0.7))
+        BT = PyKDL.Frame(rot, PyKDL.Vector(x-0.20, y, z+0.5))
         tol = 10.0
         self.velma_task_executor.setRightLWRImpedance(200, 200, 500, 1000, 1000, 1000)
         if not self.velma_task_executor.velma.moveCartImpRight([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
@@ -889,6 +1071,254 @@ class PutDownObject(smach_rcprg.State):
         self.velma_task_executor.hideHands()
         self.velma_task_executor.moveToStartingPosition()
         self.marker_publisher.stop()
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
+
+class PutDownObjectLeft(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
+        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+        self.description = u'Odstawiam obiekt'
+        self.velma_task_executor = velma_task_executor
+        self.marker_publisher = marker_publisher
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Odstawiam obiekt' )
+
+        object_pose = self.velma_task_executor.prepareForLeftOpenning('stolik')
+
+        print("Set cimp mode for left lwr")
+        self.velma_task_executor.setJointImpedanceMode()
+        if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.2):
+            raise Exception("Could not set CartImp mode for Left lwr")
+
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            raise Exception("Left effector error")
+
+
+        print "Moving the right tool and equilibrium pose from 'wrist' to 'grip' frame..."
+        T_B_Wl = self.velma_task_executor.velma.getTf("B", "Wl")
+        T_Wl_Gl = self.velma_task_executor.velma.getTf("Wl", "Gl")
+        if not self.velma_task_executor.velma.moveCartImpLeft([T_B_Wl*T_Wl_Gl], [0.1], [T_Wl_Gl], [0.1], None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.5):
+            exitError(18)
+        # if self.velma_task_executor.velma.waitForEffectorRight() != 0:
+        #     exitError(19)
+        print "The right tool is now in 'grip' pose"
+        rospy.sleep(0.5)
+
+        # if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.2):
+        #   raise Exception("Could not set CartImp mode for left lwr")
+
+        # if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+        #   raise Exception("Left effector error")
+
+        # self.velma_task_executor.setLeftLWRImpedance(1000, 1000, 1000, 1000, 1000, 1000)
+
+        # print "Move above stolik"
+        # objectTF = self.velma_task_executor.velma.getTf("B", "stolik")
+        # self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, 0.1, 0, 1.2, 0)
+
+        # # self.velma_task_executor.hideHands()
+        # print "Set mode"
+        # self.velma_task_executor.setCartesianImpedanceMode()
+        # # self.velma_task_executor.setCartesianImpedanceMode()
+        # self.velma_task_executor.setLeftLWRImpedance(300, 1000, 1000, 2000, 1000, 1000)
+        # print "Putting down"
+        # self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, 0.1, 0, 0.6, 0)
+
+        # print("Close hand on object")
+        # handDesiredState = dest_q = [74.0/180.0*math.pi, 74.0/180.0*math.pi, 74.0/180.0*math.pi, 0]
+        # self.velma_task_executor.velma.moveHandLeft(handDesiredState, [1,1,1,1], [1000, 1000, 1000, 1000], 1000, hold=True)
+        # if self.velma_task_executor.velma.waitForHandLeft() != 0:
+        #   raise Exception("Could not catch with left hand")
+
+        # print("Open hand on object")
+        # # print("Open hand") # CZEKAJ 
+        # # self.velma_task_executor.openLeftHand()
+        # # rospy.sleep(3.0)
+        # handDesiredState = dest_q = [10.0/180.0*math.pi, 10.0/180.0*math.pi, 10.0/180.0*math.pi, 0]
+        # self.velma_task_executor.velma.moveHandLeft(handDesiredState, [1,1,1,1], [1000, 1000, 1000, 1000], 1000, hold=True)
+        # if self.velma_task_executor.velma.waitForHandLeft() != 0:
+        #   raise Exception("Could not catch with left hand")
+        # i=0
+        # while i< 5:
+        #     print "HAND CLOSED"
+        #     print "HAND CLOSED"
+        #     print "HAND CLOSED"
+        #     print "HAND CLOSED"
+        #     print "HAND CLOSED"
+        #     print "HAND CLOSED"
+        #     print "HAND CLOSED"
+        #     i= i +1
+        # self.velma_task_executor.hideHands()
+        # print("lift")
+        # self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.18, 0, 0.15, 0)
+           
+        # print("pull hand back")
+        # self.velma_task_executor.moveLeftRelativeToInCartImpMode(objectTF, -0.95, 0, 0.15, 0)
+
+        # self.velma_task_executor.moveMobileBase(-0.0, -0.2, 0.0, 1.0)
+        # self.velma_task_executor.moveToStartingPosition()
+
+
+        tableTF = self.velma_task_executor.velma.getTf("B", "stolik")
+        x = tableTF.p[0]
+        y = tableTF.p[1]
+        z = tableTF.p[2]
+        
+        # rot = PyKDL.Rotation.RPY( 1.540, -1.540, 0)
+        rot = PyKDL.Rotation.RPY( -1.540, -1.540, -1.540)
+        BT = PyKDL.Frame(rot, PyKDL.Vector(x-0.35, y-0.1, z+1.2))
+
+        
+        print("Move hand over the table")
+        tol = 10.0
+        self.velma_task_executor.setLeftLWRImpedance(1000, 1000, 200, 2000, 1000, 1000)
+        if not self.velma_task_executor.velma.moveCartImpLeft([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
+            raise Exception("Could not move in cartesian impedance mode")
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.01):
+                raise Exception("Could not make it to given position")
+
+
+
+        print("Put can on the table")
+        BT = PyKDL.Frame(rot, PyKDL.Vector(x-0.35, y-0.1, z+0.5))
+        tol = 10.0
+        self.velma_task_executor.setLeftLWRImpedance(200, 200, 500, 1000, 1000, 1000)
+        if not self.velma_task_executor.velma.moveCartImpLeft([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
+            raise Exception("Could not move in cartesian impedance mode")
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.01):
+                raise Exception("Could not make it to given position")
+
+        
+
+        print("open hand")
+        dest_q = [0.0, 0.0, 0.0, 0]
+        self.velma_task_executor.velma.moveHandLeft(dest_q, [1,1,1,1], [5000, 5000, 5000, 5000], 1000, hold=True)
+        if self.velma_task_executor.velma.waitForHandLeft() != 0:
+            raise Exception("Hand error")
+            rospy.sleep(0.5)
+
+        print("pull back")
+        BT = PyKDL.Frame(rot, PyKDL.Vector(x-0.35, y-0.1, z+1.2))
+        tol = 10.0
+        if not self.velma_task_executor.velma.moveCartImpLeft([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
+            raise Exception("Could not move in cartesian impedance mode")
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.01):
+                raise Exception("Could not make it to given position")
+        print("Move base")
+        self.velma_task_executor.setJointImpedanceMode()
+        self.velma_task_executor.moveMobileBase(-0.1, 0.0, 0.0, 5.0)
+        print("Hide hands")
+        self.velma_task_executor.hideHands()
+        print("Set move pose")
+        self.velma_task_executor.moveToStartingPosition()
+
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
+
+class EmergencyPutDownObject(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface, velma_task_executor, marker_publisher):
+        smach_rcprg.State.__init__(self, input_keys=[], output_keys=[],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+        self.description = u'Odstawiam obiekt'
+        self.velma_task_executor = velma_task_executor
+        self.marker_publisher = marker_publisher
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Odstawiam obiekt' )
+
+        object_pose = self.velma_task_executor.prepareForLeftOpenning('szafka_above')
+
+        print("Set cimp mode for left lwr")
+        self.velma_task_executor.setJointImpedanceMode()
+        if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.2):
+            raise Exception("Could not set CartImp mode for Left lwr")
+
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            raise Exception("Left effector error")
+
+        print "Moving the right tool and equilibrium pose from 'wrist' to 'grip' frame..."
+        T_B_Wl = self.velma_task_executor.velma.getTf("B", "Wl")
+        T_Wl_Gl = self.velma_task_executor.velma.getTf("Wl", "Gl")
+        if not self.velma_task_executor.velma.moveCartImpLeft([T_B_Wl*T_Wl_Gl], [0.1], [T_Wl_Gl], [0.1], None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.5):
+            exitError(18)
+        # if self.velma_task_executor.velma.waitForEffectorRight() != 0:
+        #     exitError(19)
+        print "The right tool is now in 'grip' pose"
+        rospy.sleep(0.5)
+
+        tableTF = self.velma_task_executor.velma.getTf("B", "szafka_above")
+        x = tableTF.p[0]
+        y = tableTF.p[1]
+        z = tableTF.p[2]
+        
+        # rot = PyKDL.Rotation.RPY( 1.540, -1.540, 0)
+        rot = PyKDL.Rotation.RPY( 1.540, -1.540, 1.540)
+        BT = PyKDL.Frame(rot, PyKDL.Vector(x, y, z+0.3))
+
+        
+        print("Move hand over the table")
+        tol = 10.0
+        self.velma_task_executor.setLeftLWRImpedance(1000, 1000, 200, 2000, 1000, 1000)
+        if not self.velma_task_executor.velma.moveCartImpLeft([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
+            raise Exception("Could not move in cartesian impedance mode")
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.01):
+                raise Exception("Could not make it to given position")
+
+
+
+        print("Put can on the table")
+        BT = PyKDL.Frame(rot, PyKDL.Vector(x, y, z+0.1))
+        tol = 10.0
+        self.velma_task_executor.setLeftLWRImpedance(200, 200, 500, 1000, 1000, 1000)
+        if not self.velma_task_executor.velma.moveCartImpLeft([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
+            raise Exception("Could not move in cartesian impedance mode")
+        if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+            if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.01):
+                raise Exception("Could not make it to given position")
+
+        
+
+        print("open hand")
+        dest_q = [0.0, 0.0, 0.0, 0]
+        self.velma_task_executor.velma.moveHandLeft(dest_q, [1,1,1,1], [5000, 5000, 5000, 5000], 1000, hold=True)
+        if self.velma_task_executor.velma.waitForHandLeft() != 0:
+            raise Exception("Hand error")
+        rospy.sleep(1)
+
+        # print("pull back")
+        # BT = PyKDL.Frame(rot, PyKDL.Vector(x, y, z+0.3))
+        # tol = 10.0
+        # if not self.velma_task_executor.velma.moveCartImpLeft([BT], [5.0], None, None, None, None, PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.1, path_tol=PyKDL.Twist(PyKDL.Vector(tol, tol, tol), PyKDL.Vector(tol, 0.5, tol))):
+        #     raise Exception("Could not move in cartesian impedance mode")
+        # if self.velma_task_executor.velma.waitForEffectorLeft() != 0:
+        #     if not self.velma_task_executor.velma.moveCartImpLeftCurrentPos(start_time=0.01):
+        #         raise Exception("Could not make it to given position")
+        print("Move base")
+        self.velma_task_executor.setJointImpedanceMode()
+        self.velma_task_executor.moveMobileBase(-0.1, 0.0, 0.0, 5.0)
+        print("Hide hands")
+        self.velma_task_executor.hideHands()
+        print("Set move pose")
+        self.velma_task_executor.moveToStartingPosition()
+
 
         if self.__shutdown__:
             return 'shutdown'

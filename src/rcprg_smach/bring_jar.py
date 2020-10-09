@@ -9,6 +9,9 @@ from threading import Thread
 from moveit_msgs.msg import AttachedCollisionObject, CollisionObject
 from shape_msgs.msg import SolidPrimitive
 import tf_conversions.posemath as pm
+from rcprg_ros_utils import exitError, MarkerPublisher
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Vector3
 
 import smach_rcprg
 import navigation
@@ -110,6 +113,7 @@ class BringJar(smach_rcprg.StateMachine):
         self.userdata.help_to_open = navigation.PoseDescription({'place_name':unicode('help_to_open')})
 
         with self:
+
             smach_rcprg.StateMachine.add('SetContainerDestination', SetBaseDestination(sim_mode, conversation_interface),
                                     transitions={'ok':'SetNavParams', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
@@ -141,31 +145,31 @@ class BringJar(smach_rcprg.StateMachine):
                                     remapping={})
 
             smach_rcprg.StateMachine.add('OpenDoor', manipulation.OpenDoor(sim_mode, conversation_interface, worker),
-                                    transitions={'ok':'PrepareToMoveBase2', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    transitions={'ok':'TakeOutObjectLeft', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'object_container_pose':'object_container_pose'})
 
-            smach_rcprg.StateMachine.add('PrepareToMoveBase2', manipulation.PrepareToMoveBase(sim_mode, conversation_interface, worker),
-                                    transitions={'ok':'CorrectBasePose2', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={})
+            # smach_rcprg.StateMachine.add('PrepareToMoveBase2', manipulation.PrepareToMoveBase(sim_mode, conversation_interface, worker),
+            #                         transitions={'ok':'CorrectBasePose2', 'preemption':'PREEMPTED', 'error': 'FAILED',
+            #                         'shutdown':'shutdown'},
+            #                         remapping={})
 
-            smach_rcprg.StateMachine.add('CorrectBasePose2', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
-                                    transitions={'FINISHED':'LookForObject', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={'goal':'take_out_pose', 'susp_data':'susp_data'})
+            # smach_rcprg.StateMachine.add('CorrectBasePose2', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            #                         transitions={'FINISHED':'LookForObject', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+            #                         'shutdown':'shutdown'},
+            #                         remapping={'goal':'take_out_pose', 'susp_data':'susp_data'})
 
-            smach_rcprg.StateMachine.add('LookForObject', manipulation.LookForObject(sim_mode, conversation_interface, worker),
-                                    transitions={'ok':'ApproachObject', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={})
+            # smach_rcprg.StateMachine.add('LookForObject', manipulation.LookForObject(sim_mode, conversation_interface, worker),
+            #                         transitions={'ok':'ApproachObject', 'preemption':'PREEMPTED', 'error': 'FAILED',
+            #                         'shutdown':'shutdown'},
+            #                         remapping={})
 
-            smach_rcprg.StateMachine.add('ApproachObject', manipulation.ApproachObject(sim_mode, conversation_interface, worker),
-                                    transitions={'ok':'TakeOutObject', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={})
+            # smach_rcprg.StateMachine.add('ApproachObject', manipulation.ApproachObject(sim_mode, conversation_interface, worker),
+            #                         transitions={'ok':'TakeOutObject', 'preemption':'PREEMPTED', 'error': 'FAILED',
+            #                         'shutdown':'shutdown'},
+            #                         remapping={})
 
-            smach_rcprg.StateMachine.add('TakeOutObject', manipulation.TakeOutObject(sim_mode, conversation_interface, worker, marker_publisher),
+            smach_rcprg.StateMachine.add('TakeOutObjectLeft', manipulation.TakeOutObjectLeft(sim_mode, conversation_interface, worker, marker_publisher),
                                     transitions={'ok':'SetBringDestination', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={})
@@ -181,12 +185,11 @@ class BringJar(smach_rcprg.StateMachine):
                                     remapping={})
 
             smach_rcprg.StateMachine.add('MoveToBringDestination', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
-                                    transitions={'FINISHED':'PutDownObject', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+                                    transitions={'FINISHED':'PutDownObjectLeft', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'goal_pose', 'susp_data':'susp_data'})
 
-
-            smach_rcprg.StateMachine.add('PutDownObject', manipulation.PutDownObject(sim_mode, conversation_interface, worker, marker_publisher),
+            smach_rcprg.StateMachine.add('PutDownObjectLeft', manipulation.PutDownObjectLeft(sim_mode, conversation_interface, worker, marker_publisher),
                                     transitions={'ok':'SetEndDestination', 'preemption':'PREEMPTED', 'error':'FAILED'
                                     ,'shutdown':'shutdown', },
                                     remapping={})
@@ -199,4 +202,4 @@ class BringJar(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('MoveToEnd', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'FINISHED', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
-                                    remapping={'goal':'end_pose', 'susp_data':'susp_data'})
+                                    remapping={'goal':'goal_pose', 'susp_data':'susp_data'})
