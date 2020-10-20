@@ -41,11 +41,18 @@ class MainState(TaskER.SuspendableState):
 
         while True:
             if self.is_suspension_flag() != None:
+                print""
+                print""
+                print""
                 print "IDLE GOT SUSP FLAG"
+                print""
+                print""
+                print""
+                print""
                 # self.conversation_interface.removeAutomaticAnswer(answer1_id)
                 # self.conversation_interface.removeAutomaticAnswer(answer2_id)
                 # self.conversation_interface.stop()
-                # self.service_preempt()
+                # self.request_preempt()
                 return 'PREEMPTED'
 
             if self.__shutdown__:
@@ -53,7 +60,7 @@ class MainState(TaskER.SuspendableState):
                 # self.conversation_interface.removeAutomaticAnswer(answer1_id)
                 # self.conversation_interface.removeAutomaticAnswer(answer2_id)
                 # self.conversation_interface.stop()
-                self.service_preempt()
+                self.request_preempt()
                 return 'shutdown'
 
             rospy.sleep(0.2)

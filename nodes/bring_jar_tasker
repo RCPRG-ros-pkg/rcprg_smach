@@ -6,6 +6,7 @@ import sys
 import rospy
 import smach
 import smach_ros
+import rospkg
 
 import rcprg_smach.conversation
 import rcprg_smach.bring_jar
@@ -60,6 +61,13 @@ def ptf_csp(ptf_id):
         req = CostConditionsRequest()
         req = ptf_id[1]
         return [flag, CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)]
+class PulledOut():
+    def __init__(self):
+        self.value = False
+    def set(self, trigger):
+        self.value = trigger
+    def get(self):
+        return self.value
 class MyTaskER(TaskER):
     def __init__(self,da_state_name, da_name):
         global kb_places
@@ -78,7 +86,7 @@ class MyTaskER(TaskER):
         print 'Reading KB for places from file "' + places_xml_filename + '"'
         self.kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
         kb_places = self.kb_places
-
+        self.pulled_out = PulledOut()
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
                 ('ack',             'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
                 ('ack_i_took',      'ack_i_took'),
@@ -87,7 +95,7 @@ class MyTaskER(TaskER):
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ], self.sim_mode)
-        self.my_fsm = rcprg_smach.bring_jar.BringJar(self.sim_mode, self.conversation_interface, self.kb_places)
+        self.my_fsm = rcprg_smach.bring_jar.BringJar(self.sim_mode, self.conversation_interface, self.kb_places, self.pulled_out)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -97,6 +105,8 @@ class MyTaskER(TaskER):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Cleanup.execute'
         self.conversation_interface.stop()
+        self.sis.stop()
+        self.sis.clear()
         return 'ok'
 
     def get_suspension_tf(self,susp_data):
@@ -109,18 +119,33 @@ class MyTaskER(TaskER):
         print "susp data[0]: ", susp_data.getData()[0]
         data = susp_data.getData()
         fsm_executable = None
-        for idx in range(2, len(data), 2):
-            print data[idx]
-            if data[idx] == 'executable':
-                fsm_executable = data[idx+1]
-            elif data[idx] == 'rosrun':
-                ros_pkg = data[idx+1]
-                ros_exec = data[idx+2]
-                fsm_executable = "rosrun "+ros_pkg+" "+ros_exec
-        if fsm_executable == None:
-            print "harmoniser did not specified executable for suspension behaviour, terminating task"
-            fsm_executable = "terminate task"
+        rospack = rospkg.RosPack()
+
+        # list all packages, equivalent to rospack list
+        rospack.list() 
+        print "GET_SUSPEND:\nPULLED_OUT: ", self.pulled_out.get()
+        # if self.pulled_out.get() == True:
+        ts_path = rospack.get_path('rcprg_smach')
+        mod = imp.load_source("BringJarSuspension",ts_path+"/src/rcprg_smach/suspend_bj.py")
+        self.sis.stop()
+        self.sis.clear()
+        self.swap_state(u'ExeSuspension', mod.BringJarSuspension(self.sim_mode, self.conversation_interface, kb_places, self.pulled_out.get()))
+        self.sis.start()
+        fsm_executable = self.userdata.object_container
         return fsm_executable
+        # else:
+        #     for idx in range(2, len(data), 2):
+        #         print data[idx]
+        #         if data[idx] == 'executable':
+        #             fsm_executable = data[idx+1]
+        #         elif data[idx] == 'rosrun':
+        #             ros_pkg = data[idx+1]
+        #             ros_exec = data[idx+2]
+        #             fsm_executable = "rosrun "+ros_pkg+" "+ros_exec
+        # if fsm_executable == None:
+        #     print "harmoniser did not specified executable for suspension behaviour, terminating task"
+        #     fsm_executable = "terminate task"
+        # return fsm_executable
 
     def exe_suspension_tf(self,fsm_es_in):
         print "My TASKER -- exe_suspension_tf"
@@ -130,7 +155,9 @@ class MyTaskER(TaskER):
         print 'ExecSuspension.execute'
         #srv.shutdown()
         print fsm_es_in
-        if fsm_es_in == "terminate task":
+        if fsm_es_in == None:
+            return 'FINISHED'
+        elif fsm_es_in == "terminate task":
             return 'shutdown'
         else:
             p = subprocess.Popen(fsm_es_in , shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -152,7 +179,7 @@ class MyTaskER(TaskER):
 
         imp.reload(rcprg_smach.bring_jar)
         print "SWAPPING"
-        self.swap_state('ExecFSM', rcprg_smach.bring_jar.BringJar(self.sim_mode, self.conversation_interface, self.kb_places))
+        self.swap_state('ExecFSM', rcprg_smach.bring_jar.BringJar(self.sim_mode, self.conversation_interface, self.kb_places, self.pulled_out))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
@@ -225,5 +252,4 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    main()
-    print "ALLLLLLL CLOOOOOSSSSEEEEED"
+    exit(main())
