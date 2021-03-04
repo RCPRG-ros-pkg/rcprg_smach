@@ -13,6 +13,7 @@ from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
+from TaskER.TaskER import TaskER
 
 import navigation
 import smach_rcprg
@@ -34,9 +35,9 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     return result
 
-class SetHumanAndDestination(smach_rcprg.TaskER.BlockingState):
+class SetHumanAndDestination(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=['human_pose', 'dest_pose'],
+        TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=['human_pose', 'dest_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -68,9 +69,9 @@ class SetHumanAndDestination(smach_rcprg.TaskER.BlockingState):
             return 'shutdown'
         return 'ok'
 
-class IntroduceTask(smach_rcprg.TaskER.BlockingState):
+class IntroduceTask(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, greeted):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'timeout', 'shutdown'])
         print "INTRO INIT"
         self.conversation_interface = conversation_interface
@@ -107,9 +108,9 @@ class IntroduceTask(smach_rcprg.TaskER.BlockingState):
         self.greeted.set(True)
         return 'ok'
 
-class Goodbye(smach_rcprg.TaskER.BlockingState):
+class Goodbye(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'timeout', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -143,9 +144,9 @@ class Goodbye(smach_rcprg.TaskER.BlockingState):
 
 
 
-class SayAskForGoods(smach_rcprg.TaskER.BlockingState):
+class SayAskForGoods(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['goods_name'], output_keys=['q_load_answer_id'],
+        TaskER.BlockingState.__init__(self, input_keys=['goods_name'], output_keys=['q_load_answer_id'],
                              outcomes=['ok', 'preemption', 'timeout', 'error', 'shutdown', 'turn_around'])
 
         self.conversation_interface = conversation_interface
@@ -214,9 +215,9 @@ class SayAskForGoods(smach_rcprg.TaskER.BlockingState):
 
         raise Exception('Unreachable code')
 
-class SayTakeGoods(smach_rcprg.TaskER.BlockingState):
+class SayTakeGoods(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['goods_name', 'q_load_answer_id'],
+        TaskER.BlockingState.__init__(self, input_keys=['goods_name', 'q_load_answer_id'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown', 'timeout', 'turn_around'])
 
         self.conversation_interface = conversation_interface
@@ -285,9 +286,9 @@ class SayTakeGoods(smach_rcprg.TaskER.BlockingState):
 
         raise Exception('Unreachable code')
 
-class SayIFinished(smach_rcprg.TaskER.BlockingState):
+class SayIFinished(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self,
+        TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'shutdown'])
 
         self.conversation_interface = conversation_interface

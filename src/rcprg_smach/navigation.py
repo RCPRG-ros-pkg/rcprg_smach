@@ -20,6 +20,7 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from TaskER.TaskER import TaskER
 from task_manager import PoseDescription
 import smach_rcprg
+from tiago_smach import tiago_torso_controller
 
 NAVIGATION_MAX_TIME_S = 100
 
@@ -35,6 +36,10 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     print result
     return result
+
+def getFromPose(pose):
+    roll, pitch, yaw = euler_from_quaternion([pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w])
+    return pose.position.x, pose.position.y, yaw
 
 class RememberCurrentPose(TaskER.BlockingState):
     def __init__(self, sim_mode):
@@ -219,45 +224,45 @@ class UnderstandGoal(TaskER.BlockingState):
         userdata.move_goal = result
         return 'ok'
 
-# class SetHeight(TaskER.BlockingState):
-#     def __init__(self, sim_mode, conversation_interface):
-#         TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['torso_height'],
-#                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
+class SetHeight(TaskER.BlockingState):
+    def __init__(self, sim_mode, conversation_interface):
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['torso_height'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
-#         self.conversation_interface = conversation_interface
-#         assert sim_mode in ['sim', 'gazebo', 'real']
-#         self.sim_mode = sim_mode
-#         if self.sim_mode in ['gazebo', 'real']:
-#             self.torso_controller = tiago_torso_controller.TiagoTorsoController()
+        self.conversation_interface = conversation_interface
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.sim_mode = sim_mode
+        if self.sim_mode in ['gazebo', 'real']:
+            self.torso_controller = tiago_torso_controller.TiagoTorsoController()
 
-#         self.description = u'Zmieniam wysokość'
+        self.description = u'Zmieniam wysokość'
 
-#     def transition_function(self, userdata):
-#         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-#         if self.sim_mode == 'sim':
-#             return 'ok'
+        if self.sim_mode == 'sim':
+            return 'ok'
 
-#         current_height = self.torso_controller.get_torso_height()
+        current_height = self.torso_controller.get_torso_height()
 
-#         if current_height is None:
-#             return 'error'
+        if current_height is None:
+            return 'error'
 
-#         if abs(current_height - userdata.torso_height) > 0.05:
-#             self.torso_controller.set_torso_height(userdata.torso_height)
-#             for i in range(30):
-#                 if self.preempt_requested():
-#                     self.service_preempt()
-#                     return 'preemption'
+        if abs(current_height - userdata.torso_height) > 0.05:
+            self.torso_controller.set_torso_height(userdata.torso_height)
+            for i in range(30):
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return 'preemption'
 
-#                 #if self.conversation_interface.consumeExpected('q_current_task'):
-#                 #    #self.conversation_interface.addSpeakSentence( u'Zmieniam wysokość.' )
-#                 #    self.conversation_interface.speakNowBlocking( u'Zmieniam wysokość.' )
-#                 rospy.sleep(0.1)
+                #if self.conversation_interface.consumeExpected('q_current_task'):
+                #    #self.conversation_interface.addSpeakSentence( u'Zmieniam wysokość.' )
+                #    self.conversation_interface.speakNowBlocking( u'Zmieniam wysokość.' )
+                rospy.sleep(0.1)
 
-#         if self.__shutdown__:
-#             return 'shutdown'
-#         return 'ok'
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
 
 class SayImGoingTo(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
@@ -432,6 +437,32 @@ class MoveToBlocking(TaskER.BlockingState):
         self.suspendable_move_to = MoveTo(self.sim_mode,self.conversation_interface)
 
     def transition_function(self, userdata):
+        return self.suspendable_move_to.transition_function(userdata)
+
+class MoveToHuman(TaskER.SuspendableState):
+    def __init__(self, sim_mode, conversation_interface):
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.current_pose = Pose()
+        self.is_feedback_received = False
+        self.move_base_status = GoalStatus.PENDING
+        self.is_goal_achieved = False
+        self.sim_mode = sim_mode
+        self.conversation_interface = conversation_interface
+
+        TaskER.SuspendableState.__init__(self,
+                             outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
+                             input_keys=['move_goal', 'susp_data'])
+
+        self.description = u'Jadę'
+        self.suspendable_move_to = MoveTo(self.sim_mode,self.conversation_interface)
+
+    def transition_function(self, userdata):
+        human_pose = getFromPose(userdata.move_goal.parameters['pose'])
+        dest_pose =Pose()
+        dest_pose.position.x = human_pose[0] +1.5*math.cos(human_pose[2]) + 1.5*math.sin(human_pose[2])
+        dest_pose.position.y = human_pose[1] +1.5*math.cos(human_pose[2]) + 1.5*math.sin(human_pose[2])
+        dest_pose.orientation = makePose(0,0,human_pose[2]-math.pi/2).orientation
+        userdata.move_goal.parameters['pose'] = dest_pose
         return self.suspendable_move_to.transition_function(userdata)
 
 class MoveTo(TaskER.SuspendableState):
@@ -823,6 +854,47 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     remapping={'move_goal':'move_goal'})
 
             smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
+
+            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'})
+
+            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
+                                    transitions={'ok':'FAILED', 'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+class MoveToHumanComplex(smach_rcprg.StateMachine):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
+                                            input_keys=['goal', 'susp_data'])
+
+        self.description = u'Jadę do określonego miejsca'
+
+        with self:
+            smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
+                                    transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'current_pose':'current_pose'})
+
+            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
+                                    'shutdown':'shutdown'},
+                                    remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('MoveTo', MoveToHuman(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
