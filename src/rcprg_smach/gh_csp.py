@@ -15,6 +15,7 @@ from tasker_msgs.msg import RobotResource, ScheduleParams
 from tasker_msgs.srv import SuspendConditions, CostConditions, SuspendConditionsResponse, CostConditionsResponse
 from nav_msgs.srv import *
 from nav_msgs.msg import *
+import std_srvs.srv as std_srvs
 
 
 import rcprg_kb.places_xml as kb_p
@@ -34,11 +35,11 @@ def makePose(x, y, theta):
 class GH_csp():
     def __init__(self, human_name):
         self.human_name = human_name
-        if self.human_name == "John":
+        if self.human_name == "Tomek":
             # walk factor for human 0
-            self.factor_walk = 1#0.15
+            self.factor_walk = 0.65#0.15
             # sit factor for human 0
-            self.factor_sit = 1#0.3
+            self.factor_sit = 5#0.3
             # stand factor for human 0
             self.factor_stand = 1#0.15
         else:
@@ -109,6 +110,7 @@ class GH_csp():
         ##
         # plan to get cost from final state given in request to the state required by this DA 
         ##
+        rospy.wait_for_service('/move_base/GlobalPlanner/make_plan')
         path_client = rospy.ServiceProxy('/move_base/GlobalPlanner/make_plan', GetPlan)
         req_path = GetPlanRequest()
         ros_time = rospy.Time()
@@ -124,6 +126,16 @@ class GH_csp():
         req_path.goal.header.frame_id = "map"
         req_path.goal.pose = human_pose
         resp = path_client(req_path)
+        while len(resp.plan.poses) < 2:
+            print "++++++++++++++++++++++++++++++++++++++"
+            print "CANNOT CALCULATE COST CONDITIONS <",human_name,"> "
+            print "++++++++++++++++++++++++++++++++++++++"
+            rospy.wait_for_service('/move_base/clear_costmaps')
+            #try:
+            clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
+            clear_costmaps()
+            resp = path_client(req_path)
+            rospy.sleep(1)
         # print "PATH LENGTH: ",len(resp.plan.poses)
         path_distance_approach = 0
         if len(resp.plan.poses) > 2:
@@ -152,6 +164,7 @@ class GH_csp():
         ##
         # plan to get cost from final state given by a candidate for interrupting task to the state required by this DA 
         ##
+        rospy.wait_for_service('/move_base/GlobalPlanner/make_plan')
         path_client = rospy.ServiceProxy('/move_base/GlobalPlanner/make_plan', GetPlan)
         req_path = GetPlanRequest()
         ros_time = rospy.Time()
@@ -167,6 +180,16 @@ class GH_csp():
         req_path.goal.header.frame_id = "map"
         req_path.goal.pose= human_pose
         resp = path_client(req_path)
+        while len(resp.plan.poses) < 2:
+            print "++++++++++++++++++++++++++++++++++++++"
+            print "CANNOT CALCULATE SUSPEND CONDITIONS <",self.human_name,"> "
+            print "++++++++++++++++++++++++++++++++++++++"
+            rospy.wait_for_service('/move_base/clear_costmaps')
+            #try:
+            clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
+            clear_costmaps()
+            resp = path_client(req_path)
+            rospy.sleep(1)
         # print "PATH LENGTH: ",len(resp.plan.poses)
         path_distance_approach = 0
         if len(resp.plan.poses) > 2:
@@ -186,10 +209,14 @@ class GH_csp():
 
 
     def get_schedule_params_gh(self, robot_pose, human_pose, destination_pose, human_name):
+        isinstance(human_pose,Pose)
         human_posture = rospy.get_param(human_name+"/actor_posture", "stand")
         sp = ScheduleParams()
         print "CALC COST"
+        print "H_POSE: ", human_pose
+        print "R_POSE: ", robot_pose
 
+        rospy.wait_for_service('/move_base/GlobalPlanner/make_plan')
         path_client = rospy.ServiceProxy('/move_base/GlobalPlanner/make_plan', GetPlan)
         req_path = GetPlanRequest()
         ros_time = rospy.Time()
@@ -205,6 +232,17 @@ class GH_csp():
         req_path.goal.header.frame_id = "map"
         req_path.goal.pose = human_pose
         resp = path_client(req_path)
+        while len(resp.plan.poses) < 2:
+            print "++++++++++++++++++++++++++++++++++++++"
+            print "CANNOT CALCULATE APPROACH PATH <",human_name,"> "
+            print "++++++++++++++++++++++++++++++++++++++"
+            print resp
+            rospy.wait_for_service('/move_base/clear_costmaps')
+            #try:
+            clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
+            clear_costmaps()
+            resp = path_client(req_path)
+            rospy.sleep(1)
         # print "PATH LENGTH: ",len(resp.plan.poses)
         path_distance_approach = 0
         if len(resp.plan.poses) > 2:
@@ -217,12 +255,28 @@ class GH_csp():
         req_path.goal.header.frame_id = "map"
         req_path.goal.pose = destination_pose
         resp = path_client(req_path)
-        # print "PATH LENGTH: ",len(resp.plan.poses)
+        while len(resp.plan.poses) < 2:
+            print "++++++++++++++++++++++++++++++++++++++"
+            print "CANNOT CALCULATE GUIDE PATH <",human_name,"> "
+            print "++++++++++++++++++++++++++++++++++++++"
+            rospy.wait_for_service('/move_base/clear_costmaps')
+            #try:
+            clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
+            clear_costmaps()
+            resp = path_client(req_path)
+            rospy.sleep(1)
+        # print "++++++++++++++++++++++++++++++++++++++"
+        # print "PATH LENGTH TO:",human_name,": ",path_distance_approach
+        # print "++++++++++++++++++++++++++++++++++++++"
         path_distance_guide = 0
         if len(resp.plan.poses) > 2:
             for i in range(len(resp.plan.poses)-1):
                 # print "POSE: ",resp.plan.poses[i]
                 path_distance_guide += math.sqrt(math.pow((resp.plan.poses[i+1].pose.position.x - resp.plan.poses[i].pose.position.x),2) + pow((resp.plan.poses[i+1].pose.position.y - resp.plan.poses[i].pose.position.y), 2))
+              
+        # print "++++++++++++++++++++++++++++++++++++++"
+        # print "PATH LENGTH DEST:",human_name,": ",path_distance_guide
+        # print "++++++++++++++++++++++++++++++++++++++"
         if human_posture == "walk":
             sp.cost_per_sec = self.factor_walk
             cost = path_distance_guide * self.factor_walk

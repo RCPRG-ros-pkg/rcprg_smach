@@ -72,7 +72,7 @@ def ptf_csp(ptf_id):
     # set flag 'self-terminate' to terminate DA if in Wait or Init state
     flag = None
     terminate_flag = rospy.get_param('/term_ID', 'false')
-    cost = rospy.get_param("/cost_ID_"+my_name, 1)
+    cost = rospy.get_param("/cost_ID_"+my_name, 5)
     print terminate_flag
     if terminate_flag == True:
         flag = 'self-terminate'

@@ -28,9 +28,9 @@ import subprocess
 import imp
 
 kb_places = None
-sim_mode = 'sim'
+sim_mode = 'real'
 human_name = None
-base_frame='/torso_base'
+base_frame='/base_link'
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
     global human_name
@@ -43,11 +43,11 @@ def ptf_csp(ptf_id):
         flag = 'self-terminate'
     csp_handler = rcprg_smach.gh_csp.GH_csp(human_name)
     robot_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, "Rico")
-    robot_pose_updater.update_pose(base_frame)
+    robot_pose_updater.update_pose(base_frame, False)
     robot_pose = csp_handler.get_robot_pose(sim_mode, kb_places, "Rico")
     human_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, human_name)
     human_frame = "/"+human_name
-    human_pose_updater.update_pose(human_frame)
+    human_pose_updater.update_pose(human_frame, False)
     human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
 
     if ptf_id[0] == "scheduleParams":

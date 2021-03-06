@@ -15,7 +15,6 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from geometry_msgs.msg import Pose
 
 import rcprg_smach.navigation
-import rcprg_smach.navigation_blocked
 from TaskER.TaskER import TaskER
 from rcprg_smach import smach_rcprg
 

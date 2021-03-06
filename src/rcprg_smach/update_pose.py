@@ -97,14 +97,14 @@ class UpdatePose():
         self.listener = tf.TransformListener()
         self.marker_pub = rospy.Publisher(pose_id+"_markers", Marker, queue_size=10)
         self.pose_id = pose_id
-        pl = self.kb_places.getPlaceByName(pose_id, "sim")
+        pl = self.kb_places.getPlaceByName(pose_id, sim_mode)
         pt_dest = pl.getPt()
         norm = pl.getN()
         quat = quaternion_from_euler(0,0,math.atan2(norm[1], norm[0]))
         setMarker('add',self.marker_pub, pose_id, pt_dest[0], pt_dest[1], quat[0],quat[1],quat[2], quat[3])
 
 
-    def update_pose(self, transform_name):
+    def update_pose(self, transform_name, face_place):
         if self.sim_mode in ['sim', 'gazebo']:
             mc = self.kb_places.getMapContext('sim')
         elif self.sim_mode == 'real':
@@ -119,8 +119,8 @@ class UpdatePose():
             while not rospy.is_shutdown():
                 try:
                     ros_time = rospy.Time()
-                    self.listener.waitForTransform('/map', transform_name, ros_time, rospy.Duration(8.0))
-                    (trans,rot) = self.listener.lookupTransform('/map', transform_name, ros_time)
+                    self.listener.waitForTransform('/map', transform_name, ros_time, rospy.Duration(15.0))
+                    (trans,rot) = self.listener.lookupTransform('/map', transform_name, rospy.Time(0))
                     if len(trans) != 0:
                         break
                 except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
@@ -130,5 +130,9 @@ class UpdatePose():
             x = math.cos(theta)
             y = math.sin(theta)
             self.pose_id = unicode(self.pose_id)
-            mc.updatePointPlace(self.pose_id, self.pose_id, trans, [x, y])
+            print "UPDATING POSE: ", self.pose_id, "| data: ", trans
+            if mc.getPlaceById(self.pose_id) ==None:
+                mc.addPointPlace(self.pose_id, self.pose_id, trans, [x, y], face_place)
+            else:
+                mc.updatePointPlace(self.pose_id, self.pose_id, trans, [x, y])
             setMarker('modify', self.marker_pub, self.pose_id, trans[0], trans[1], rot[0],rot[1],rot[2], rot[3])

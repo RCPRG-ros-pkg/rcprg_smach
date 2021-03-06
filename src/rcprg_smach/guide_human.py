@@ -87,7 +87,7 @@ class IntroduceTask(TaskER.BlockingState):
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
         human_name = userdata.human_name.encode('utf-8').decode('utf-8')
-        if human_name in ["John", "Peter"]:
+        if human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzystof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
@@ -334,7 +334,7 @@ class GuideHuman(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToHumanComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'IntroduceTask', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'human_pose', 'susp_data':'susp_data'})

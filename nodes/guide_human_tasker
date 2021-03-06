@@ -2,6 +2,7 @@
 # encoding: utf8
 
 import sys
+import math
 
 import rospy
 import rospkg
@@ -28,7 +29,8 @@ from tasker_msgs.srv import CostConditionsRequest, CostConditionsResponse
 # for ExeSuspension state
 import subprocess
 import imp
-
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
+from geometry_msgs.msg import Pose
 kb_places = None
 sim_mode = None
 human_name = None
@@ -46,26 +48,34 @@ def ptf_csp(ptf_id):
     flag = None
     csp_handler = rcprg_smach.gh_csp.GH_csp(human_name)
     robot_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, "Rico")
-    robot_pose_updater.update_pose("/base_link")
+    robot_pose_updater.update_pose("/base_link", False)
     robot_pose = csp_handler.get_robot_pose(sim_mode, kb_places, "Rico")
     human_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, human_name)
     human_frame = "/"+human_name
-    human_pose_updater.update_pose(human_frame)
+    human_pose_updater.update_pose(human_frame, False)
     human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
+    human_approach_pose = Pose()
+    human_yaw = euler_from_quaternion([human_pose.orientation.x,human_pose.orientation.y,human_pose.orientation.z,human_pose.orientation.w])[2]
+    human_approach_pose.position.x = human_pose.position.x +1*math.cos(human_yaw)
+    human_approach_pose.position.y = human_pose.position.y +1*math.sin(human_yaw)
+    (human_approach_pose.orientation.x,human_approach_pose.orientation.y,\
+            human_approach_pose.orientation.z,human_approach_pose.orientation.w) = quaternion_from_euler(0,0,human_yaw-math.pi)
+    # print "H_approach: ", human_approach_pose
+
     destination_pose = csp_handler.get_robot_pose(sim_mode, kb_places, guide_destination)
     if destination_pose == 'is-volumetric':
         destination_pose = csp_handler.get_robot_pose(sim_mode, kb_places, guide_destination, human_name)
     if ptf_id[0] == "scheduleParams":
-        return [flag, csp_handler.get_schedule_params_gh(robot_pose, human_pose, destination_pose, human_name)]
+        return [flag, csp_handler.get_schedule_params_gh(robot_pose, human_approach_pose, destination_pose, human_name)]
         # return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
         req = ptf_id[1]
-        return [flag, csp_handler.get_suspend_conditions_gh(req, greeted.get(), human_pose)]
+        return [flag, csp_handler.get_suspend_conditions_gh(req, greeted.get(), human_approach_pose)]
     elif ptf_id[0] == "startCondition":
         req = CostConditionsRequest()
         req = ptf_id[1]
-        return [flag, csp_handler.get_cost_conditions_gh(req, human_pose, human_name)]# CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)]
+        return [flag, csp_handler.get_cost_conditions_gh(req, human_approach_pose, human_name)]# CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)]
 class Greeted():
     def __init__(self):
         self.value = False
@@ -256,7 +266,7 @@ def main():
     if da_name == None or da_type == None or da_id == None:
         print "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified"
         return 1
-    da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name )
+    da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name)
     print "RUN BRING"
     da.run( MyTaskER(da_state_name,da_name) )
     print "BG ENDED"

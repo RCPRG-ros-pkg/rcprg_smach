@@ -39,6 +39,7 @@ def makePose(x, y, theta):
 
 def getFromPose(pose):
     roll, pitch, yaw = euler_from_quaternion([pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w])
+    print "getFromPose: ", roll,",", pitch,",", yaw 
     return pose.position.x, pose.position.y, yaw
 
 class RememberCurrentPose(TaskER.BlockingState):
@@ -179,6 +180,7 @@ class UnderstandGoal(TaskER.BlockingState):
                     if pl.isDestinationFace():
                         print "HUMAN"
                         print "NORM: ", norm
+                        print "pt_dest: ", pt_dest
                         angle_dest = -math.atan2(norm[1], -norm[0])
                         print "angle_dest: ", angle_dest
                         pt = pt_dest
@@ -195,7 +197,7 @@ class UnderstandGoal(TaskER.BlockingState):
                     print 'UnderstandGoal place type: point'
                     print 'pt: {}, pt_dest: {}, norm: {}, angle_dest: {}'.format(pt, pt_dest, norm, angle_dest)
                 elif pl.getType() == 'volumetric':
-                    pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
+                    pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/tmp/')
                     angle_dest = 0.0
                 else:
                     raise Exception('Unknown place type: "' + pl.getType() + '"')
@@ -439,32 +441,6 @@ class MoveToBlocking(TaskER.BlockingState):
     def transition_function(self, userdata):
         return self.suspendable_move_to.transition_function(userdata)
 
-class MoveToHuman(TaskER.SuspendableState):
-    def __init__(self, sim_mode, conversation_interface):
-        assert sim_mode in ['sim', 'gazebo', 'real']
-        self.current_pose = Pose()
-        self.is_feedback_received = False
-        self.move_base_status = GoalStatus.PENDING
-        self.is_goal_achieved = False
-        self.sim_mode = sim_mode
-        self.conversation_interface = conversation_interface
-
-        TaskER.SuspendableState.__init__(self,
-                             outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
-                             input_keys=['move_goal', 'susp_data'])
-
-        self.description = u'Jadę'
-        self.suspendable_move_to = MoveTo(self.sim_mode,self.conversation_interface)
-
-    def transition_function(self, userdata):
-        human_pose = getFromPose(userdata.move_goal.parameters['pose'])
-        dest_pose =Pose()
-        dest_pose.position.x = human_pose[0] +1.5*math.cos(human_pose[2]) + 1.5*math.sin(human_pose[2])
-        dest_pose.position.y = human_pose[1] +1.5*math.cos(human_pose[2]) + 1.5*math.sin(human_pose[2])
-        dest_pose.orientation = makePose(0,0,human_pose[2]-math.pi/2).orientation
-        userdata.move_goal.parameters['pose'] = dest_pose
-        return self.suspendable_move_to.transition_function(userdata)
-
 class MoveTo(TaskER.SuspendableState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -481,6 +457,9 @@ class MoveTo(TaskER.SuspendableState):
 
         self.description = u'Jadę'
 
+    def set_destination_pose(self, userdata):
+        pass
+
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
@@ -488,7 +467,7 @@ class MoveTo(TaskER.SuspendableState):
 
         assert isinstance(place_name, unicode)
         answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
-
+        self.set_destination_pose(userdata)
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
 
@@ -544,7 +523,16 @@ class MoveTo(TaskER.SuspendableState):
                     rospy.logwarn('State: Navigation took too much time, returning error')
                     client.cancel_all_goals()
                     return 'stall'
+                # print "\n\n\n"
+                # print "======================================"
+                # print "susp flag: ", self.is_suspension_flag()
 
+                # data = userdata.susp_data.req_data
+                # print "=================================="
+                # print "data= ", data
+                # print "=================================="
+                # print "======================================"
+                # print "\n\n\n"
                 if self.is_suspension_flag() != None:
                     self.conversation_interface.removeAutomaticAnswer(answer_id)
                     client.cancel_all_goals()
@@ -608,6 +596,18 @@ class MoveTo(TaskER.SuspendableState):
     def move_base_active_cb(self):
         # Do nothing
         return
+
+class MoveToHuman(MoveTo):
+    def __init__(self, sim_mode, conversation_interface):
+        MoveTo.__init__(self,sim_mode,conversation_interface)
+
+    def set_destination_pose(self, userdata):
+        human_pose = getFromPose(userdata.move_goal.parameters['pose'])
+        dest_pose =Pose()
+        dest_pose.position.x = human_pose[0] +1*math.cos(human_pose[2])
+        dest_pose.position.y = human_pose[1] +1*math.sin(human_pose[2])
+        dest_pose.orientation = makePose(0,0,human_pose[2]-math.pi).orientation
+        userdata.move_goal.parameters['pose'] = dest_pose
 
 class TurnAround(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
@@ -911,6 +911,7 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
+
 
 #    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:

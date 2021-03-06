@@ -81,7 +81,7 @@ class CheckHumanState(TaskER.BlockingState):
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe '+human_name+u', jak się czujesz?' )
         rospy.sleep(2)
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację. Dowidzenia.x' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację. Dowidzenia.' )
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
@@ -131,7 +131,7 @@ class HumanFell(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToHumanComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'CheckHumanState', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'human_pose', 'susp_data':'susp_data'})
