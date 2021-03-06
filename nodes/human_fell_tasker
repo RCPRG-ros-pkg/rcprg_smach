@@ -6,6 +6,9 @@ import sys
 import rospy
 import smach
 import smach_ros
+from geometry_msgs.msg import Pose
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
+import math
 
 import rcprg_smach.conversation
 import rcprg_smach.human_fell
@@ -49,9 +52,15 @@ def ptf_csp(ptf_id):
     human_frame = "/"+human_name
     human_pose_updater.update_pose(human_frame, False)
     human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
+    human_approach_pose = Pose()
+    human_yaw = euler_from_quaternion([human_pose.orientation.x,human_pose.orientation.y,human_pose.orientation.z,human_pose.orientation.w])[2]
+    human_approach_pose.position.x = human_pose.position.x +1*math.cos(human_yaw)
+    human_approach_pose.position.y = human_pose.position.y +1*math.sin(human_yaw)
+    (human_approach_pose.orientation.x,human_approach_pose.orientation.y,\
+            human_approach_pose.orientation.z,human_approach_pose.orientation.w) = quaternion_from_euler(0,0,human_yaw-math.pi)
 
     if ptf_id[0] == "scheduleParams":
-        return [flag, csp_handler.get_schedule_params_hf(robot_pose=robot_pose, human_pose=human_pose)]
+        return [flag, csp_handler.get_schedule_params_hf(robot_pose=robot_pose, human_pose=human_approach_pose)]
         #ScheduleParams(cost = 10, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
