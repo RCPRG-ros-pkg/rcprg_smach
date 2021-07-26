@@ -47,7 +47,7 @@ class SetHumanAndDestination(TaskER.BlockingState):
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek i jego cel' )
+        # self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek i jego cel' )
 
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
@@ -87,7 +87,7 @@ class IntroduceTask(TaskER.BlockingState):
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
         human_name = userdata.human_name.encode('utf-8').decode('utf-8')
-        if human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzystof"]:
+        if human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzysztof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
@@ -125,7 +125,7 @@ class Goodbye(TaskER.BlockingState):
             userdata.human_name = userdata.human_name.decode('utf-8')
         userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
 
-        if userdata.human_name in ["John", "Peter"]:
+        if userdata.human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzysztof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"

@@ -231,18 +231,19 @@ class GH_csp():
         req_path.start.pose = robot_pose
         req_path.goal.header.frame_id = "map"
         req_path.goal.pose = human_pose
+        req_path.tolerance = 0.3
         resp = path_client(req_path)
         while len(resp.plan.poses) < 2:
             print "++++++++++++++++++++++++++++++++++++++"
             print "CANNOT CALCULATE APPROACH PATH <",human_name,"> "
             print "++++++++++++++++++++++++++++++++++++++"
-            print resp
+            print req_path
             rospy.wait_for_service('/move_base/clear_costmaps')
             #try:
             clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
             clear_costmaps()
             resp = path_client(req_path)
-            rospy.sleep(1)
+            rospy.sleep(2)
         # print "PATH LENGTH: ",len(resp.plan.poses)
         path_distance_approach = 0
         if len(resp.plan.poses) > 2:
@@ -254,17 +255,19 @@ class GH_csp():
         req_path.start.pose = human_pose
         req_path.goal.header.frame_id = "map"
         req_path.goal.pose = destination_pose
+        req_path.tolerance = 0.3
         resp = path_client(req_path)
         while len(resp.plan.poses) < 2:
             print "++++++++++++++++++++++++++++++++++++++"
             print "CANNOT CALCULATE GUIDE PATH <",human_name,"> "
             print "++++++++++++++++++++++++++++++++++++++"
+            print req_path
             rospy.wait_for_service('/move_base/clear_costmaps')
             #try:
             clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
             clear_costmaps()
             resp = path_client(req_path)
-            rospy.sleep(1)
+            rospy.sleep(2)
         # print "++++++++++++++++++++++++++++++++++++++"
         # print "PATH LENGTH TO:",human_name,": ",path_distance_approach
         # print "++++++++++++++++++++++++++++++++++++++"

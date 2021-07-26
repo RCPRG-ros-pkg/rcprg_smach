@@ -157,7 +157,7 @@ class UnderstandGoal(TaskER.BlockingState):
 
                 current_pose = userdata.in_current_pose
                 pt_start = (current_pose.parameters['pose'].position.x, current_pose.parameters['pose'].position.y)
-
+                print "pt_start: ", pt_start
                 try:
                     pl = self.kb_places.getPlaceByName(place_name, mc_name)
                 except:

@@ -47,7 +47,7 @@ class SetHumanAndDestination(TaskER.BlockingState):
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
+        # self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
         userdata.human_pose = rcprg_smach.navigation.PoseDescription({'place_name':unicode(userdata.human_name)})
 
         if self.__shutdown__:

@@ -47,7 +47,7 @@ class SetHumanAndDestination(TaskER.BlockingState):
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
+        # self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
         human_name = userdata.human_name.encode('utf-8').decode('utf-8')
@@ -80,8 +80,8 @@ class CheckHumanState(TaskER.BlockingState):
 
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe '+human_name+u', jak się czujesz?' )
-        rospy.sleep(2)
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację. Dowidzenia.' )
+        rospy.sleep(3)
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację.' )
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'

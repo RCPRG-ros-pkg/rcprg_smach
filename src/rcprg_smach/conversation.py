@@ -167,6 +167,7 @@ class ConversationMachine:
         goal = tiago_msgs.msg.SaySentenceGoal()
         goal.sentence = text
         if self.__sim_mode == 'real':
+            print 'sending conversation goal'
             self.rico_says_client.send_goal(goal)
             self.rico_says_client.wait_for_result()
         print 'Rico says (blocking) finished'
