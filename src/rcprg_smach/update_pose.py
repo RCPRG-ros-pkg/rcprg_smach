@@ -93,11 +93,15 @@ def setMarker(action, publisher,marker_name, x,y,ox,oy,oz,ow):
 class UpdatePose():
     def __init__(self, sim_mode, kb_places, pose_id):
         self.sim_mode = sim_mode
+        if sim_mode == 'gazebo':
+            map_context = 'sim'
+        else:
+            map_context = sim_mode
         self.kb_places = kb_places
         self.listener = tf.TransformListener()
         self.marker_pub = rospy.Publisher(pose_id+"_markers", Marker, queue_size=10)
         self.pose_id = pose_id
-        pl = self.kb_places.getPlaceByName(pose_id, sim_mode)
+        pl = self.kb_places.getPlaceByName(pose_id, map_context)
         pt_dest = pl.getPt()
         norm = pl.getN()
         quat = quaternion_from_euler(0,0,math.atan2(norm[1], norm[0]))
