@@ -66,7 +66,37 @@ class MyTaskER(TaskER):
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ], self.sim_mode)
-        self.my_fsm = rcprg_smach.navigation.MoveToComplex(self.sim_mode, self.conversation_interface, self.kb_places)
+
+        if len(sys.argv) < 3:
+            raise Exception('Too few arguments: ' + str(sys.argv))
+
+        place_name = None
+        for idx in range(1, len(sys.argv), 2):
+            if sys.argv[idx] == 'miejsce':
+                place_name = sys.argv[idx+1] 
+
+        if isinstance(place_name, str):
+            place_name = place_name.decode('utf-8')
+        place_name = place_name.encode('utf-8').decode('utf-8')
+
+        dictionary = DisctionaryServiceClient()
+        place_name_m = dictionary.getCases(place_name).getCase('mianownik')
+        self.userdata.goal = PoseDescription({'place_name': place_name_m})
+        self.userdata.fsm_es = ""
+
+        if self.sim_mode == 'real':
+            mc_name = 'real'
+        elif self.sim_mode == 'gazebo':
+            mc_name = 'sim'
+            
+        print 'get place: ', place_name_m
+        pl = self.kb_places.getPlaceByName(place_name_m, mc_name)
+
+        if pl.isDestinationHuman():
+            self.my_fsm = rcprg_smach.navigation.MoveToHumanComplex(self.sim_mode, self.conversation_interface, self.kb_places)
+        else:
+            self.my_fsm = rcprg_smach.navigation.MoveToComplex(self.sim_mode, self.conversation_interface, self.kb_places)
+
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -131,28 +161,20 @@ class MyTaskER(TaskER):
 
         # imp.reload(tiago_smach.human_fell)
         print "SWAPPING"
-        self.swap_state('ExecFSM', rcprg_smach.navigation.MoveToComplex(self.sim_mode, self.conversation_interface, self.kb_places))
+        if self.sim_mode == 'real':
+            mc_name = 'real'
+        elif self.sim_mode == 'gazebo':
+            mc_name = 'sim'
+        pl = self.kb_places.getPlaceByName(self.userdata.goal.parameters['place_name'], mc_name)
+        if pl.isDestinationHuman():
+            self.swap_state('ExecFSM', rcprg_smach.navigation.MoveToHumanComplex(self.sim_mode, self.conversation_interface, self.kb_places))
+        else:
+            self.swap_state('ExecFSM', rcprg_smach.navigation.MoveToComplex(self.sim_mode, self.conversation_interface, self.kb_places))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
     def initialise_tf(self):
         print "My TASKER -- initialise"
-        if len(sys.argv) < 3:
-            raise Exception('Too few arguments: ' + str(sys.argv))
-
-        place_name = None
-        for idx in range(1, len(sys.argv), 2):
-            if sys.argv[idx] == 'miejsce':
-                place_name = sys.argv[idx+1] 
-
-        if isinstance(place_name, str):
-            place_name = place_name.decode('utf-8')
-        place_name = place_name.encode('utf-8').decode('utf-8')
-
-        dictionary = DisctionaryServiceClient()
-        place_name_m = dictionary.getCases(place_name).getCase('mianownik')
-        self.userdata.goal = PoseDescription({'place_name': place_name_m})
-        self.userdata.fsm_es = ""
         self.conversation_interface.start()
 
 def main():

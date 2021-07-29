@@ -9,6 +9,7 @@ import actionlib
 import math
 import threading
 import copy
+import yaml
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
@@ -23,7 +24,6 @@ import smach_rcprg
 from tiago_smach import tiago_torso_controller
 
 NAVIGATION_MAX_TIME_S = 100
-
 
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
@@ -113,7 +113,7 @@ class UnderstandGoal(TaskER.BlockingState):
 
         print "GOAL_POSE: ", userdata.goal_pose
         if 'place_name' in userdata.goal_pose.parameters:
-            place_name = userdata.goal_pose.parameters['place_name']
+            place_name = userdata.goal_pose.parameters['place_name'].lower()
             pose_valid = False
             place_name_valid = True
             pose = None
@@ -171,10 +171,14 @@ class UnderstandGoal(TaskER.BlockingState):
 # pt_dest:  (3.6, 2.0)
 
 #
-
                 if pl.getType() == 'point':
-                    pt_dest = pl.getPt()
-                    norm = pl.getN()
+                    if pl.isDestinationHuman():
+                        human_pose = yaml.load(rospy.get_param(place_name+'/pose'))
+                        pt_dest = human_pose['x'], human_pose['y']
+                        norm = math.cos(human_pose['theta']), math.sin(human_pose['theta'])
+                    else: 
+                        pt_dest = pl.getPt()
+                        norm = pl.getN()
                     print "NORM_0: ", norm[0]
                     print "NORM_1: ", norm[1]
                     if pl.isDestinationFace():
@@ -460,7 +464,11 @@ class MoveTo(TaskER.SuspendableState):
     def set_destination_pose(self, userdata):
         pass
 
+    def update_destination_pose(self, userdata):
+        return False
+
     def transition_function(self, userdata):
+        global HUMAN_POSE_UPDATE_IN_APPROACH
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.parameters['place_name']
@@ -499,7 +507,7 @@ class MoveTo(TaskER.SuspendableState):
             # userdata.nav_result = action_result.result
 
             start_time = rospy.Time.now()
-
+            last_human_update = rospy.Time.now()
             self.is_goal_achieved = False
             while self.is_goal_achieved == False:
                 # action_feedback.feedback.current_pose = self.current_pose
@@ -523,6 +531,10 @@ class MoveTo(TaskER.SuspendableState):
                     rospy.logwarn('State: Navigation took too much time, returning error')
                     client.cancel_all_goals()
                     return 'stall'
+
+                if self.update_destination_pose(userdata):
+                    goal.target_pose.pose = userdata.move_goal.parameters['pose']
+                    client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
                 # print "\n\n\n"
                 # print "======================================"
                 # print "susp flag: ", self.is_suspension_flag()
@@ -599,7 +611,10 @@ class MoveTo(TaskER.SuspendableState):
 
 class MoveToHuman(MoveTo):
     def __init__(self, sim_mode, conversation_interface):
+        self.last_human_pose_update = None
+        self.HUMAN_POSE_UPDATE_IN_APPROACH = 2
         MoveTo.__init__(self,sim_mode,conversation_interface)
+
 
     def set_destination_pose(self, userdata):
         human_pose = getFromPose(userdata.move_goal.parameters['pose'])
@@ -608,6 +623,22 @@ class MoveToHuman(MoveTo):
         dest_pose.position.y = human_pose[1] +1*math.sin(human_pose[2])
         dest_pose.orientation = makePose(0,0,human_pose[2]-math.pi).orientation
         userdata.move_goal.parameters['pose'] = dest_pose
+    
+    def update_destination_pose(self, userdata):
+        if self.last_human_pose_update is None:
+            self.last_human_pose_update = rospy.Time.now()
+        if rospy.Time.now() > self.last_human_pose_update + rospy.Duration.from_sec(self.HUMAN_POSE_UPDATE_IN_APPROACH):
+            human = userdata.move_goal.parameters['place_name']
+            current_human_pose = yaml.load(rospy.get_param(human+'/pose'))
+            dest_pose =Pose()
+            dest_pose.position.x = current_human_pose['x'] +1*math.cos(current_human_pose['theta'])
+            dest_pose.position.y = current_human_pose['y'] +1*math.sin(current_human_pose['theta'])
+            dest_pose.orientation = makePose(0,0,current_human_pose['theta']-math.pi).orientation
+            userdata.move_goal.parameters['pose'] = dest_pose
+            return True
+        else:
+            return False
+
 
 class TurnAround(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
