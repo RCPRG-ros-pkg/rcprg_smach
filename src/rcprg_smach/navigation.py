@@ -34,12 +34,10 @@ def makePose(x, y, theta):
     result.orientation.y = q[1]
     result.orientation.z = q[2]
     result.orientation.w = q[3]
-    print result
     return result
 
 def getFromPose(pose):
     roll, pitch, yaw = euler_from_quaternion([pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w])
-    print "getFromPose: ", roll,",", pitch,",", yaw 
     return pose.position.x, pose.position.y, yaw
 
 class RememberCurrentPose(TaskER.BlockingState):
@@ -627,18 +625,19 @@ class MoveToHuman(MoveTo):
     def update_destination_pose(self, userdata):
         if self.last_human_pose_update is None:
             self.last_human_pose_update = rospy.Time.now()
-        if rospy.Time.now() > self.last_human_pose_update + rospy.Duration.from_sec(self.HUMAN_POSE_UPDATE_IN_APPROACH):
-            human = userdata.move_goal.parameters['place_name']
-            current_human_pose = yaml.load(rospy.get_param(human+'/pose'))
-            dest_pose =Pose()
-            dest_pose.position.x = current_human_pose['x'] +1*math.cos(current_human_pose['theta'])
-            dest_pose.position.y = current_human_pose['y'] +1*math.sin(current_human_pose['theta'])
-            dest_pose.orientation = makePose(0,0,current_human_pose['theta']-math.pi).orientation
-            userdata.move_goal.parameters['pose'] = dest_pose
-            return True
-        else:
+        if rospy.Time.now() < self.last_human_pose_update + rospy.Duration.from_sec(self.HUMAN_POSE_UPDATE_IN_APPROACH):
             return False
-
+        self.last_human_pose_update = rospy.Time.now()
+        print "----------- UPDATING HUMAN POSE for MoveTo----------------"
+        human = userdata.move_goal.parameters['place_name']
+        current_human_pose = yaml.load(rospy.get_param(human+'/pose'))
+        dest_pose =Pose()
+        dest_pose.position.x = current_human_pose['x'] +1*math.cos(current_human_pose['theta'])
+        dest_pose.position.y = current_human_pose['y'] +1*math.sin(current_human_pose['theta'])
+        dest_pose.orientation = makePose(0,0,current_human_pose['theta']-math.pi).orientation
+        userdata.move_goal.parameters['pose'] = dest_pose
+        return True
+        
 
 class TurnAround(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
@@ -941,7 +940,7 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
 
             smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
-                                    remapping={'move_goal':'move_goal'})
+                                    remapping={'move_goal':'move_goal','goal':'move_goal'})
 
 
 #    def transition_function(self, userdata):
