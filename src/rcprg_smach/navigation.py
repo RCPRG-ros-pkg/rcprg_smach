@@ -21,6 +21,7 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from TaskER.TaskER import TaskER
 from task_manager import PoseDescription
 import smach_rcprg
+from rcprg_smach.hazard_detector import HazardDetector
 from tiago_smach import tiago_torso_controller
 
 NAVIGATION_MAX_TIME_S = 100
@@ -638,6 +639,164 @@ class MoveToHuman(MoveTo):
         userdata.move_goal.parameters['pose'] = dest_pose
         return True
         
+class MoveToAwareHazards(MoveTo):
+    def __init__(self, sim_mode, conversation_interface):
+        self.hazard_detector = HazardDetector()
+        self.hazard_trigger = False
+        MoveTo.__init__(self,sim_mode,conversation_interface)
+
+
+    # def move_base_done_cb(self, status, result):
+    #     self.is_goal_achieved = True
+    #     if self.hazard_trigger == True:
+    #         self.move_base_status = status
+    #     self.move_base_status = status
+
+    def transition_function(self, userdata):
+        global HUMAN_POSE_UPDATE_IN_APPROACH
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        place_name = userdata.move_goal.parameters['place_name']
+
+        assert isinstance(place_name, unicode)
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
+        self.set_destination_pose(userdata)
+        pose = userdata.move_goal.parameters['pose']
+        place_name = userdata.move_goal.parameters['place_name']
+
+        if self.sim_mode == 'sim':
+            for i in range(50):
+                if self.is_suspension_flag() != None:
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    self.request_preempt()
+                    return 'preemption'
+
+                rospy.sleep(0.2)
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
+            return 'ok'
+        else:
+            goal = MoveBaseGoal()
+            goal.target_pose.pose = pose
+            goal.target_pose.header.frame_id = 'map'
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+            client.wait_for_server()
+
+            # start moving
+            client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+
+            # action_feedback = GoActionFeedback()
+            # action_result = GoActionResult()
+            # action_result.result.is_goal_accomplished = False
+            # userdata.nav_result = action_result.result
+
+            start_time = rospy.Time.now()
+            last_human_update = rospy.Time.now()
+            self.is_goal_achieved = False
+            self.hazard_trigger = False
+            while (self.is_goal_achieved == False or self.hazard_trigger == True):
+                # action_feedback.feedback.current_pose = self.current_pose
+
+                # userdata.nav_feedback = action_feedback.feedback
+                # userdata.nav_actual_pose = self.current_pose
+
+                end_time = rospy.Time.now()
+                loop_time = end_time - start_time
+                loop_time_s = loop_time.secs
+
+                if self.__shutdown__:
+                    client.cancel_all_goals()
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    self.service_preempt()
+                    return 'shutdown'
+
+                if loop_time_s > NAVIGATION_MAX_TIME_S:
+                    # break the loop, end with error state
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    rospy.logwarn('State: Navigation took too much time, returning error')
+                    client.cancel_all_goals()
+                    return 'stall'
+
+                if self.update_destination_pose(userdata):
+                    goal.target_pose.pose = userdata.move_goal.parameters['pose']
+                    client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+                self.hazard_trigger, hazard_object = self.hazard_detector.check_hazard()
+                if self.hazard_trigger:
+                    print "HAZARD DETECTED"
+                    print u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"', hazard_object, u'", biernik} na podłodze. Proszę omiń tą przeszkodę.'
+                    client.cancel_goal()
+                    answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"' + hazard_object + u'", biernik} na podłodze. Proszę omiń tą przeszkodę.')
+                    rospy.sleep(3)
+                    client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+                    client.wait_for_server()
+                    client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+                    rospy.sleep(1)
+                    self.is_goal_achieved = False
+
+                # print "\n\n\n"
+                # print "======================================"
+                # print "susp flag: ", self.is_suspension_flag()
+
+                # data = userdata.susp_data.req_data
+                # print "=================================="
+                # print "data= ", data
+                # print "=================================="
+                # print "======================================"
+                # print "\n\n\n"
+                if self.is_suspension_flag() != None:
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    client.cancel_all_goals()
+                    self.service_preempt()
+                    return 'preemption'
+
+                rospy.sleep(0.1)
+
+            # Manage state of the move_base action server
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
+
+            # Here check move_base DONE status
+            if self.move_base_status == GoalStatus.PENDING:
+                # The goal has yet to be processed by the action server
+                raise Exception('Wrong move_base action status: "PENDING"')
+            elif self.move_base_status == GoalStatus.ACTIVE:
+                # The goal is currently being processed by the action server
+                raise Exception('Wrong move_base action status: "ACTIVE"')
+            elif self.move_base_status == GoalStatus.PREEMPTED:
+                # The goal received a cancel request after it started executing
+                #   and has since completed its execution (Terminal State)
+                return 'preemption'
+            elif self.move_base_status == GoalStatus.SUCCEEDED:
+                # The goal was achieved successfully by the action server (Terminal State)
+                return 'ok'
+            elif self.move_base_status == GoalStatus.ABORTED:
+                # The goal was aborted during execution by the action server due
+                #    to some failure (Terminal State)
+                return 'stall'
+            elif self.move_base_status == GoalStatus.REJECTED:
+                # The goal was rejected by the action server without being processed,
+                #    because the goal was unattainable or invalid (Terminal State)
+                return 'error'
+            elif self.move_base_status == GoalStatus.PREEMPTING:
+                # The goal received a cancel request after it started executing
+                #    and has not yet completed execution
+                raise Exception('Wrong move_base action status: "PREEMPTING"')
+            elif self.move_base_status == GoalStatus.RECALLING:
+                # The goal received a cancel request before it started executing,
+                #    but the action server has not yet confirmed that the goal is canceled
+                raise Exception('Wrong move_base action status: "RECALLING"')
+            elif self.move_base_status == GoalStatus.RECALLED:
+                # The goal received a cancel request before it started executing
+                #    and was successfully cancelled (Terminal State)
+                return 'preemption'
+            elif self.move_base_status == GoalStatus.LOST:
+                # An action client can determine that a goal is LOST. This should not be
+                #    sent over the wire by an action server
+                raise Exception('Wrong move_base action status: "LOST"')
+            else:
+                raise Exception('Wrong move_base action status value: "' + str(self.move_base_status) + '"')
+
+
 
 class TurnAround(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
@@ -883,7 +1042,7 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-            smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
+            smach_rcprg.StateMachine.add('MoveTo', MoveToAwareHazards(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
