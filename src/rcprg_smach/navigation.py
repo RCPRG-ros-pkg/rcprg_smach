@@ -23,7 +23,10 @@ from task_manager import PoseDescription
 import smach_rcprg
 from rcprg_smach.hazard_detector import HazardDetector
 from tiago_smach import tiago_torso_controller
-
+from pal_common_msgs.msg import DisableAction, DisableActionGoal
+from control_msgs.msg import PointHeadAction, PointHeadActionGoal, PointHeadGoal
+from actionlib_msgs.msg import GoalID
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 NAVIGATION_MAX_TIME_S = 100
 
 def makePose(x, y, theta):
@@ -643,6 +646,7 @@ class MoveToAwareHazards(MoveTo):
     def __init__(self, sim_mode, conversation_interface):
         self.hazard_detector = HazardDetector()
         self.hazard_trigger = False
+        self.sim_mode = sim_mode
         MoveTo.__init__(self,sim_mode,conversation_interface)
 
 
@@ -683,6 +687,24 @@ class MoveToAwareHazards(MoveTo):
             client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
             client.wait_for_server()
 
+            # turn off auto head motion
+            if self.sim_mode not in ['sim', 'gazebo']:
+                client_autonomous_head = actionlib.SimpleActionClient('/pal_head_manager/disable', DisableAction)
+                client_autonomous_head.wait_for_server()
+                client_autonomous_head.send_goal(DisableGoal())
+                # client_autonomous_head.wait_for_result()
+            # move head to detect objects on the floor
+            client_move_head = actionlib.SimpleActionClient('/head_controller/point_head_action', PointHeadAction)
+            client_move_head.wait_for_server()
+            point_head_goal = PointHeadGoal()
+            point_head_goal.target.header.frame_id = 'base_link'
+            point_head_goal.target.point.x = 1.5
+            point_head_goal.pointing_axis.z = 1
+            point_head_goal.pointing_frame = 'xtion_rgb_optical_frame'
+            point_head_goal.min_duration.secs = 1
+            point_head_goal.max_velocity = 1
+            client_move_head.send_goal(point_head_goal)
+            # client_move_head.wait_for_result()
             # start moving
             client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
 
@@ -695,7 +717,7 @@ class MoveToAwareHazards(MoveTo):
             last_human_update = rospy.Time.now()
             self.is_goal_achieved = False
             self.hazard_trigger = False
-            while (self.is_goal_achieved == False or self.hazard_trigger == True):
+            while ( (self.is_goal_achieved == False or self.move_base_status == GoalStatus.PREEMPTED) or self.hazard_trigger == True):
                 # action_feedback.feedback.current_pose = self.current_pose
 
                 # userdata.nav_feedback = action_feedback.feedback
@@ -722,17 +744,20 @@ class MoveToAwareHazards(MoveTo):
                     goal.target_pose.pose = userdata.move_goal.parameters['pose']
                     client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
                 self.hazard_trigger, hazard_object = self.hazard_detector.check_hazard()
+                
                 if self.hazard_trigger:
                     print "HAZARD DETECTED"
                     print u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"', hazard_object, u'", biernik} na podłodze. Proszę omiń tą przeszkodę.'
+                    # goal is interrupted by the hazard cancel goal
                     client.cancel_goal()
                     answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"' + hazard_object + u'", biernik} na podłodze. Proszę omiń tą przeszkodę.')
                     rospy.sleep(3)
-                    client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+                    # goal was interrupted by hazard continue motion
                     client.wait_for_server()
                     client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
-                    rospy.sleep(1)
-                    self.is_goal_achieved = False
+                    # rospy.sleep(5)
+                    # self.is_goal_achieved = False
+                    # print "MOVE STATUS2: complete ", type(self.move_base_status)
 
                 # print "\n\n\n"
                 # print "======================================"
@@ -754,6 +779,24 @@ class MoveToAwareHazards(MoveTo):
 
             # Manage state of the move_base action server
             self.conversation_interface.removeAutomaticAnswer(answer_id)
+            # move head ahead
+            client_move_head.wait_for_server()
+            point_head_goal = PointHeadGoal()
+            print  "point_head_goal:\n", point_head_goal
+            point_head_goal.target.header.frame_id = 'torso_lift_link'
+            point_head_goal.target.point.x = 1
+            point_head_goal.target.point.z = 0.18
+            point_head_goal.pointing_axis.z = 1
+            point_head_goal.pointing_frame = 'xtion_rgb_optical_frame'
+            point_head_goal.min_duration.secs = 1
+            point_head_goal.max_velocity = 1
+            client_move_head.send_goal(point_head_goal)
+
+            # turn on auto head motion
+
+            if self.sim_mode not in ['sim', 'gazebo']:
+                client_autonomous_head = actionlib.SimpleActionClient('/pal_head_manager/disable', DisableAction)
+                client_autonomous_head.cancel()
 
             # Here check move_base DONE status
             if self.move_base_status == GoalStatus.PENDING:

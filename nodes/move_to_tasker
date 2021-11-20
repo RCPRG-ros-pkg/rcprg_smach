@@ -19,9 +19,9 @@ from pl_nouns.dictionary_client import DisctionaryServiceClient
 
 from TaskER.TaskER import TaskER
 from TaskER.dynamic_agent import DynAgent
-from TaskER.msg import RobotResource, ScheduleParams
-from TaskER.srv import SuspendConditionsRequest, SuspendConditionsResponse
-from TaskER.srv import CostConditionsRequest, CostConditionsResponse
+from tasker_msgs.msg import RobotResource, ScheduleParams
+from tasker_msgs.srv import SuspendConditionsRequest, SuspendConditionsResponse
+from tasker_msgs.srv import CostConditionsRequest, CostConditionsResponse
 # for ExeSuspension state
 import subprocess
 import imp
