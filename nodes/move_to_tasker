@@ -11,9 +11,9 @@ import smach_ros
 import rcprg_smach.conversation
 import rcprg_smach.navigation
 
-import tiago_kb.places_xml as kb_p
+import rcprg_kb.places_xml as kb_p
 
-from tiago_smach.task_manager import PoseDescription
+from rcprg_smach.task_manager import PoseDescription
 
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 

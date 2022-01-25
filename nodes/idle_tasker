@@ -67,7 +67,7 @@ class MainState(TaskER.SuspendableState):
         raise Exception('Unreachable code')
 
 def ptf_csp(ptf_id):
-    print "calculating SP: ", ptf_id
+    #print "calculating SP: ", ptf_id
     global my_name
     # set flag 'self-terminate' to terminate DA if in Wait or Init state
     flag = None
