@@ -23,7 +23,7 @@ from task_manager import PoseDescription
 import smach_rcprg
 from rcprg_smach.hazard_detector import HazardDetector
 from tiago_smach import tiago_torso_controller
-from pal_common_msgs.msg import DisableAction, DisableActionGoal
+from pal_common_msgs.msg import DisableAction, DisableActionGoal, DisableGoal
 from control_msgs.msg import PointHeadAction, PointHeadActionGoal, PointHeadGoal
 from actionlib_msgs.msg import GoalID
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -747,10 +747,10 @@ class MoveToAwareHazards(MoveTo):
                 
                 if self.hazard_trigger:
                     print "HAZARD DETECTED"
-                    print u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"', hazard_object, u'", biernik} na podłodze. Proszę omiń tą przeszkodę.'
+                    print u'Uwaga! Znalazłem {"', hazard_object, u'", biernik} na podłodze. Proszę omiń tą przeszkodę.'
                     # goal is interrupted by the hazard cancel goal
                     client.cancel_goal()
-                    answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"' + hazard_object + u'", biernik} na podłodze. Proszę omiń tą przeszkodę.')
+                    answer_id = self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"' + hazard_object + u'", biernik} na podłodze. Proszę omiń tą przeszkodę.')
                     rospy.sleep(3)
                     # goal was interrupted by hazard continue motion
                     client.wait_for_server()
@@ -796,7 +796,7 @@ class MoveToAwareHazards(MoveTo):
 
             if self.sim_mode not in ['sim', 'gazebo']:
                 client_autonomous_head = actionlib.SimpleActionClient('/pal_head_manager/disable', DisableAction)
-                client_autonomous_head.cancel()
+                client_autonomous_head.cancel_all_goals()
 
             # Here check move_base DONE status
             if self.move_base_status == GoalStatus.PENDING:

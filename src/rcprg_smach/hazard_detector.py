@@ -10,13 +10,14 @@ class HazardDetector:
 		self._last_id = -1
 		self.new_hazard = False
 		self._hazard_object = None
+		self._initialisation_time = rospy.Time.now()
 
 	def callback(self, data):
 		self._hazard_object = data
 
 	def check_hazard(self):
 		if self._hazard_object != None:
-			if self._last_id != self._hazard_object.id:
+			if self._last_id != self._hazard_object.id and self._initialisation_time < self._hazard_object.header.stamp:
 				self._last_id = self._hazard_object.id
 				return True, self._hazard_object.object
 		
