@@ -25,6 +25,10 @@ import subprocess
 import imp
 
 my_name = None
+
+global USE_SMACH_INRTOSPECTION_SERVER
+USE_SMACH_INRTOSPECTION_SERVER = False
+
 class MainState(TaskER.SuspendableState):
     # def __init__(self, conversation_interface):
     def __init__(self):
@@ -71,10 +75,10 @@ def ptf_csp(ptf_id):
     global my_name
     # set flag 'self-terminate' to terminate DA if in Wait or Init state
     flag = None
-    terminate_flag = rospy.get_param('/term_ID', 'false')
+    self_terminate_flag = rospy.get_param('/term_ID', 'false')
     cost = rospy.get_param("/cost_ID_"+my_name, 5)
-    print terminate_flag
-    if terminate_flag == True:
+    print "self_terminate_flag: ", self_terminate_flag
+    if self_terminate_flag == True:
         flag = 'self-terminate'
     if ptf_id[0] == "scheduleParams":
         return [flag, ScheduleParams(cost = cost, completion_time=1000,cost_per_sec=0,final_resource_state=RobotResource())]
@@ -89,15 +93,18 @@ def ptf_csp(ptf_id):
 
 class MyTaskER(TaskER):
     def __init__(self,da_state_name, da_name):
+        global USE_SMACH_INRTOSPECTION_SERVER
         global my_name
         my_name = unicode(da_name)
         self.name = my_name
+        rospy.init_node(self.name)
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
         TaskER.__init__(self,da_state_name)
-        self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
-        self.sis.start()
+        if USE_SMACH_INRTOSPECTION_SERVER:
+            self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
+            self.sis.start()
         # places_xml_filename = rospy.get_param('/kb_places_xml')
         # self.sim_mode = str(rospy.get_param('/sim_mode'))
         # assert self.sim_mode in ['sim', 'gazebo', 'real']
@@ -119,10 +126,13 @@ class MyTaskER(TaskER):
         # self.my_fsm = MainState(self.conversation_interface)
     	self.my_fsm = MainState()
     def shutdownRequest(self):
+        global USE_SMACH_INRTOSPECTION_SERVER
         print ("my-tasker -----------------------   shutdown")
         # self.conversation_interface.stop()
-        self.sis.stop()
-        self.sis.clear()
+
+        if USE_SMACH_INRTOSPECTION_SERVER:
+            self.sis.stop()
+            self.sis.clear()
         self.request_preempt()
 
     def cleanup_tf(self):
@@ -181,17 +191,22 @@ class MyTaskER(TaskER):
         print "My TASKER"
         pass
     def update_task_tf(self):
+        global USE_SMACH_INRTOSPECTION_SERVER
         print "My TASKER -- update_task_tf"
         print "My TASKER"
         print "My TASKER"
-        self.sis.stop()
-        self.sis.clear()
+
+        if USE_SMACH_INRTOSPECTION_SERVER:
+            self.sis.stop()
+            self.sis.clear()
 
         # imp.reload(rcprg_smach.bring_goods)
         print "SWAPPING"
         # self.swap_state('ExecFSM', MainState(self.conversation_interface))
         self.swap_state('ExecFSM', MainState())
-        self.sis.start()
+
+        if USE_SMACH_INRTOSPECTION_SERVER:
+            self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
     def initialise_tf(self):

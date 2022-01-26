@@ -44,6 +44,7 @@ def ptf_csp(ptf_id):
 class MyTaskER(TaskER):
     def __init__(self,da_state_name, da_name):
         self.name = unicode(da_name)
+        rospy.init_node(self.name)
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
@@ -102,6 +103,7 @@ class MyTaskER(TaskER):
         self.conversation_interface.stop()
         self.sis.stop()
         self.sis.clear()
+        
     def cleanup_tf(self):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Cleanup.execute'
