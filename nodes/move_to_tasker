@@ -26,6 +26,7 @@ from tasker_msgs.srv import CostConditionsRequest, CostConditionsResponse
 import subprocess
 import imp
 
+RUNIntrospectionServer = False
 
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
@@ -49,8 +50,9 @@ class MyTaskER(TaskER):
         self.conversation_interface = None
         self.kb_places = None
         TaskER.__init__(self,da_state_name)
-        self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
-        self.sis.start()
+        if RUNIntrospectionServer:
+            self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
+            self.sis.start()
         places_xml_filename = rospy.get_param('/kb_places_xml')
         self.sim_mode = str(rospy.get_param('/sim_mode'))
         assert self.sim_mode in ['sim', 'gazebo', 'real']
@@ -101,8 +103,9 @@ class MyTaskER(TaskER):
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
-        self.sis.stop()
-        self.sis.clear()
+        if RUNIntrospectionServer:
+            self.sis.stop()
+            self.sis.clear()
         
     def cleanup_tf(self):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -121,7 +124,7 @@ class MyTaskER(TaskER):
         data = susp_data.getData()
         fsm_executable = None
         for idx in range(2, len(data), 2):
-            print data[idx]
+            # print data[idx]
             if data[idx] == 'executable':
                 fsm_executable = data[idx+1]
             elif data[idx] == 'rosrun':
@@ -158,8 +161,9 @@ class MyTaskER(TaskER):
         print "My TASKER -- update_task_tf"
         print "My TASKER"
         print "My TASKER"
-        self.sis.stop()
-        self.sis.clear()
+        if RUNIntrospectionServer:
+            self.sis.stop()
+            self.sis.clear()
 
         # imp.reload(tiago_smach.human_fell)
         print "SWAPPING"
@@ -172,7 +176,8 @@ class MyTaskER(TaskER):
             self.swap_state('ExecFSM', rcprg_smach.navigation.MoveToHumanComplex(self.sim_mode, self.conversation_interface, self.kb_places))
         else:
             self.swap_state('ExecFSM', rcprg_smach.navigation.MoveToComplex(self.sim_mode, self.conversation_interface, self.kb_places))
-        self.sis.start()
+        if RUNIntrospectionServer:
+            self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
     def initialise_tf(self):

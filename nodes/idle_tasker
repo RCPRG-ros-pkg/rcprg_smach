@@ -152,7 +152,7 @@ class MyTaskER(TaskER):
         data = susp_data.getData()
         fsm_executable = None
         for idx in range(2, len(data), 2):
-            print data[idx]
+            # print data[idx]
             if data[idx] == 'executable':
                 fsm_executable = data[idx+1]
             elif data[idx] == 'rosrun':
@@ -186,9 +186,9 @@ class MyTaskER(TaskER):
             p.wait()
         return "FINISHED"
     def wait_tf(self):
-        print "My TASKER -- wait_tf"
-        print "My TASKER"
-        print "My TASKER"
+        # print "My TASKER -- wait_tf"
+        # print "My TASKER"
+        # print "My TASKER"
         pass
     def update_task_tf(self):
         global USE_SMACH_INRTOSPECTION_SERVER
