@@ -108,7 +108,7 @@ class UpdatePose():
         setMarker('add',self.marker_pub, pose_id, pt_dest[0], pt_dest[1], quat[0],quat[1],quat[2], quat[3])
 
 
-    def update_pose(self, transform_name, face_place):
+    def update_pose(self, transform_name, face_place, is_human):
         if self.sim_mode in ['sim', 'gazebo']:
             mc = self.kb_places.getMapContext('sim')
         elif self.sim_mode == 'real':
@@ -136,7 +136,7 @@ class UpdatePose():
             self.pose_id = unicode(self.pose_id)
             print "UPDATING POSE: ", self.pose_id, "| data: ", trans
             if mc.getPlaceById(self.pose_id) ==None:
-                mc.addPointPlace(self.pose_id, self.pose_id, trans, [x, y], face_place)
+                mc.addPointPlace(self.pose_id, self.pose_id, trans, [x, y], face_place, is_human)
             else:
                 mc.updatePointPlace(self.pose_id, self.pose_id, trans, [x, y])
             setMarker('modify', self.marker_pub, self.pose_id, trans[0], trans[1], rot[0],rot[1],rot[2], rot[3])

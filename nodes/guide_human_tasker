@@ -47,12 +47,14 @@ def ptf_csp(ptf_id):
     # set flag 'self-terminate' to terminate DA if in Wait or Init state
     flag = None
     csp_handler = rcprg_smach.gh_csp.GH_csp(human_name)
+    is_human = False
     robot_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, "Rico")
-    robot_pose_updater.update_pose("/base_link", False)
+    robot_pose_updater.update_pose("/base_link", False, is_human)
     robot_pose = csp_handler.get_robot_pose(sim_mode, kb_places, "Rico")
+    is_human = True
     human_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, human_name)
     human_frame = "/"+human_name
-    human_pose_updater.update_pose(human_frame, False)
+    human_pose_updater.update_pose(human_frame, False, is_human)
     human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
     human_approach_pose = Pose()
     human_yaw = euler_from_quaternion([human_pose.orientation.x,human_pose.orientation.y,human_pose.orientation.z,human_pose.orientation.w])[2]
@@ -86,6 +88,7 @@ class Greeted():
 class MyTaskER(TaskER):
     def __init__(self,da_state_name, da_name):
         self.name = unicode(da_name)
+        rospy.init_node(self.name)
         self.sim_mode = None
         self.conversation_interface = None
         global kb_places

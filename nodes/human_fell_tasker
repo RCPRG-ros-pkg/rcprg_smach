@@ -48,12 +48,14 @@ def ptf_csp(ptf_id):
     if human_posture == 'stand':
         flag = 'self-terminate'
     csp_handler = rcprg_smach.gh_csp.GH_csp(human_name)
+    is_human = False
     robot_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, "Rico")
-    robot_pose_updater.update_pose(base_frame, False)
+    robot_pose_updater.update_pose(base_frame, False, is_human)
     robot_pose = csp_handler.get_robot_pose(sim_mode, kb_places, "Rico")
     human_pose_updater = rcprg_smach.update_pose.UpdatePose(sim_mode, kb_places, human_name)
     human_frame = "/"+human_name
-    human_pose_updater.update_pose(human_frame, False)
+    is_human = True
+    human_pose_updater.update_pose(human_frame, False,is_human)
     human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
     human_approach_pose = Pose()
     human_yaw = euler_from_quaternion([human_pose.orientation.x,human_pose.orientation.y,human_pose.orientation.z,human_pose.orientation.w])[2]
@@ -79,6 +81,7 @@ class MyTaskER(TaskER):
         global sim_mode
         global human_name
         self.name = unicode(da_name)
+        rospy.init_node(self.name)
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
