@@ -57,6 +57,9 @@ class SayAskForGoods(TaskER.BlockingState):
         self.conversation_interface.addExpected('ack')
         self.conversation_interface.addExpected('ack_i_gave')
         self.conversation_interface.addExpected('turn_around')
+        self.conversation_interface.addExpected('follow_up_question')
+
+        self.conversation_interface.setAutomaticAnswer('follow_up_question', 'jade dopytywac')
 
         answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe czekam na położenie {"' + goods_name + u'", dopelniacz}' )
 
@@ -96,6 +99,17 @@ class SayAskForGoods(TaskER.BlockingState):
                 answer_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'niekorzystne warunki pogodowe wiozę {"' + goods_name + u'", biernik}' )
                 userdata.q_load_answer_id = answer_id
                 return 'ok'
+
+
+            follow_up_question = self.conversation_interface.consumeExpected('follow_up_question')
+
+            if follow_up_question:
+                [question_text] = follow_up_question.param_values
+                print(f'question text {question_text}')
+                # TODO modyfikaja agenta
+                self.conversation_interface.removeExpected('follow_up_question');
+                return 'ok'
+
             if self.conversation_interface.consumeExpected('turn_around'):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_gave')
@@ -168,7 +182,6 @@ class SayTakeGoods(TaskER.BlockingState):
                     self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answer_id)
                 return 'ok'
 
-            
 
             if self.conversation_interface.consumeExpected('turn_around'):
                 self.conversation_interface.removeExpected('ack')
