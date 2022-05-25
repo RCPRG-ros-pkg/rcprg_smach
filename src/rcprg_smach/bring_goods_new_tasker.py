@@ -52,7 +52,7 @@ class SayAskForGoods(TaskER.BlockingState):
 
         goods_name = userdata.goods_name
 
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe podaj mi {"' + goods_name + u'", biernik} i potwierdź szybko' )
 
         print 'YES THIS CODE RUNS'
         self.conversation_interface.addExpected('ack')
