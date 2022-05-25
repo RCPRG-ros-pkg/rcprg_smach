@@ -26,6 +26,8 @@ import imp
 
 my_name = None
 
+_debug = False
+
 global USE_SMACH_INRTOSPECTION_SERVER
 USE_SMACH_INRTOSPECTION_SERVER = False
 
@@ -77,7 +79,8 @@ def ptf_csp(ptf_id):
     flag = None
     self_terminate_flag = rospy.get_param('/term_ID', 'false')
     cost = rospy.get_param("/cost_ID_"+my_name, 5)
-    print "self_terminate_flag: ", self_terminate_flag
+    if _debug:
+        print "self_terminate_flag: ", self_terminate_flag
     if self_terminate_flag == True:
         flag = 'self-terminate'
     if ptf_id[0] == "scheduleParams":

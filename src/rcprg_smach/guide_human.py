@@ -162,6 +162,7 @@ class SayAskForGoods(TaskER.BlockingState):
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
+        print 'THIS RUNS rcprg/rcprg_smach/src/rcprg_smach/guide_human.py'
         self.conversation_interface.addExpected('ack')
         self.conversation_interface.addExpected('ack_i_gave')
         self.conversation_interface.addExpected('turn_around')

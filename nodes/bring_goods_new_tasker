@@ -8,7 +8,7 @@ import smach
 import smach_ros
 
 import rcprg_smach.conversation
-import rcprg_smach.bring_goods_tasker
+import rcprg_smach.bring_goods_new_tasker
 import rcprg_smach.smach_rcprg as smach_rcprg
 
 import rcprg_kb.places_xml as kb_p
@@ -67,7 +67,7 @@ class MyTaskER(TaskER):
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
                 ('follow_up_question', 'follow_up_question'),
             ], self.sim_mode)
-        self.my_fsm = rcprg_smach.bring_goods_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places)
+        self.my_fsm = rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -128,9 +128,9 @@ class MyTaskER(TaskER):
         print "My TASKER"
         self.sis.stop()
 
-        imp.reload(rcprg_smach.bring_goods_tasker)
+        imp.reload(rcprg_smach.bring_goods_new_tasker)
         print "SWAPPING"
-        self.swap_state('ExecFSM', rcprg_smach.bring_goods_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places))
+        self.swap_state('ExecFSM', rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass

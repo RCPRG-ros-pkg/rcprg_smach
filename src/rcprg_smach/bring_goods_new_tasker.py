@@ -54,12 +54,17 @@ class SayAskForGoods(TaskER.BlockingState):
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
+        print 'YES THIS CODE RUNS'
         self.conversation_interface.addExpected('ack')
+        print 'GOT ack'
         self.conversation_interface.addExpected('ack_i_gave')
+        print 'GOT ack_i_gave'
         self.conversation_interface.addExpected('turn_around')
+        print 'GOT turn_around'
         self.conversation_interface.addExpected('follow_up_question')
+        print 'GOT follow_up_question'
 
-        self.conversation_interface.setAutomaticAnswer('follow_up_question', 'jade dopytywac')
+        # self.conversation_interface.setAutomaticAnswer('follow_up_question', 'jade dopytywac')
 
         answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe czekam na położenie {"' + goods_name + u'", dopelniacz}' )
 
@@ -105,9 +110,19 @@ class SayAskForGoods(TaskER.BlockingState):
 
             if follow_up_question:
                 [question_text] = follow_up_question.param_values
-                print(f'question text {question_text}')
+                print 'question text', question_text
+
                 # TODO modyfikaja agenta
+
                 self.conversation_interface.removeExpected('follow_up_question');
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_gave')
+                self.conversation_interface.removeExpected('turn_around')
+
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
+                answer_id = self.conversation_interface.setAutomaticAnswer( 'q_load', 'jade dopytywać' )
+                userdata.q_load_answer_id = answer_id
+
                 return 'ok'
 
             if self.conversation_interface.consumeExpected('turn_around'):
@@ -181,7 +196,6 @@ class SayTakeGoods(TaskER.BlockingState):
                 if not userdata.q_load_answer_id is None:
                     self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answer_id)
                 return 'ok'
-
 
             if self.conversation_interface.consumeExpected('turn_around'):
                 self.conversation_interface.removeExpected('ack')

@@ -48,6 +48,7 @@ class ConversationMachine:
         self.__current_automatic_answer__ = None
 
     def __callbackRicoCmd__(self, data):
+        print 'CONVERSATION __callbackRicoCmd__', data
         # Data is of type tiago_msgs.msg.Command, i.e. it encapsulates an intent
         assert isinstance(data, tiago_msgs.msg.Command)
         self.__intent_list_lock__.acquire()
@@ -55,6 +56,7 @@ class ConversationMachine:
         self.__intent_list_lock__.release()
 
     def __getNameForIntent__(self, intent):
+        print 'CONVERSATION __getNameForIntent__' , intent
         assert isinstance(intent, tiago_msgs.msg.Command)
         for name, in_name in self.__item_types__:
             if in_name == intent.intent_name:
@@ -62,6 +64,7 @@ class ConversationMachine:
         return None
 
     def start(self):
+        print('CONVERSATION start')
         self.__thread_hear__ = threading.Thread(target=self.__spin_hear__, args=(1,))
         self.__thread_hear__.start()
 
@@ -69,6 +72,7 @@ class ConversationMachine:
         self.__thread_speak__.start()
 
     def stop(self):
+        print('CONVERSATION stop')
         print 'ConversationMachine stopping...'
         self.__stop__ = True
         self.__thread_hear__.join()
@@ -76,9 +80,11 @@ class ConversationMachine:
         print 'ConversationMachine stopping done.'
 
     def __spin_hear__(self, args):
+        print('CONVERSATION __spin_hear__')
         while not self.__stop__:
             self.__intent_list_lock__.acquire()
             for intent in self.__intent_list__:
+                print self.__intent_list__
                 query_type = self.__getNameForIntent__( intent )
                 # Manage expected queries
                 if query_type in self.__expected_query_types__:
@@ -88,8 +94,12 @@ class ConversationMachine:
                 answer_id_list = self.getAutomaticAnswersIds( query_type )
                 self.__pending_automatic_answers__ = self.__pending_automatic_answers__ + answer_id_list
 
+                print self.__expected_query_types__
+                print answer_id_list
+
                 # Manage unexpected queries
                 if not query_type in self.__expected_query_types__ and not bool(answer_id_list):
+                    print 'QUERY IS UNEXPECTED'
                     # Add special answer for unexpected intent
                     self.__pending_automatic_answers__.append( -1 )
 
@@ -100,6 +110,8 @@ class ConversationMachine:
             time.sleep(0.1)
 
     def __spin_speak__(self, args):
+        print('CONVERSATION __spin_speak__')
+        
         while not self.__stop__:
             # Manage automatic answers
             self.__intent_list_lock__.acquire()
@@ -115,6 +127,8 @@ class ConversationMachine:
             time.sleep(0.1)
 
     def setAutomaticAnswer(self, query_type, text):
+        print 'CONVERSATION setAutomaticAnswer' ,query_type, text
+
         assert isinstance(text, unicode)
         self.__automatic_answers_id_map__[self.__automatic_answer_id__] = (query_type, text)
         if not query_type in self.__automatic_answers_name_map__:
@@ -125,6 +139,8 @@ class ConversationMachine:
 
     # Removes automatic answer, and waits for its completion if currently executed or queued
     def removeAutomaticAnswer(self, answer_id):
+        print 'CONVERSATION removeAutomaticAnswer', answer_id
+
         assert isinstance(answer_id, (int, long))
 
         while True:
@@ -148,6 +164,8 @@ class ConversationMachine:
         self.__intent_list_lock__.release()
 
     def getAutomaticAnswersIds(self, query_type):
+        print 'CONVERSATION getAutomaticAnswersIds', query_type
+
         if not query_type in self.__automatic_answers_name_map__:
             return []
         result = []
@@ -156,6 +174,8 @@ class ConversationMachine:
         return result
 
     def __getAutomaticAnswerText__(self, answer_id):
+        print 'CONVERSATION __getAutomaticAnswerText__' , answer_id
+
         if answer_id == -1:
             return 'niekorzystne warunki pogodowe nie wiem o co chodzi'
         query_type, text = self.__automatic_answers_id_map__[answer_id]
@@ -163,6 +183,8 @@ class ConversationMachine:
 
     # Speaks a sentence and waits until it is finished
     def speakNowBlocking(self, text):
+        print 'CONVERSATION speakNowBlocking' , text
+
         print 'Rico says (blocking): "' + text + '"'
         goal = tiago_msgs.msg.SaySentenceGoal()
         goal.sentence = text
@@ -181,6 +203,7 @@ class ConversationMachine:
     #    self.rico_says_client.wait_for_result()
 
     def addExpected(self, query_type):
+        print 'CONVERSATION addExpected', query_type
         self.__intent_list_lock__.acquire()
         assert not query_type in self.__expected_query_types__
         self.__expected_query_types__.add( query_type )
@@ -188,6 +211,7 @@ class ConversationMachine:
         self.__intent_list_lock__.release()
 
     def removeExpected(self, query_type):
+        print 'CONVERSATION removeExpected' , query_type
         self.__intent_list_lock__.acquire()
         assert query_type in self.__expected_query_types__
         # Consume, if there is any left
@@ -197,6 +221,7 @@ class ConversationMachine:
         self.__intent_list_lock__.release()
 
     def consumeExpected(self, query_type):#, remove):
+        print 'CONVERSATION consumeExpected', query_type
         self.__intent_list_lock__.acquire()
         if query_type in self.__expected_queries__:
             result = self.__expected_queries__[query_type]
@@ -210,4 +235,5 @@ class ConversationMachine:
             return None
 
     def startListening(self):
+        print('CONVERSATION startListening')
         self.pub.publish(std_msgs.msg.Bool())
