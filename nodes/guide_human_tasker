@@ -98,6 +98,7 @@ class MyTaskER(TaskER):
         global greeted
         kb_places = None
         TaskER.__init__(self,da_state_name)
+        rospy.init_node(self.name)
         self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
         self.sis.start()
         places_xml_filename = rospy.get_param('/kb_places_xml')
