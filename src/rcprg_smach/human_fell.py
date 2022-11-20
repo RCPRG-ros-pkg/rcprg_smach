@@ -15,7 +15,8 @@ from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 
 import navigation
-import smach_rcprg
+from TaskER.TaskER import TaskER
+from rcprg_smach import smach_rcprg
 
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 
@@ -34,9 +35,9 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     return result
 
-class SetHumanAndDestination(smach_rcprg.State):
+class SetHumanAndDestination(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['human_name'], output_keys=['human_pose', 'dest_pose'],
+        TaskER.BlockingState.__init__(self, input_keys=['human_name'], output_keys=['human_pose', 'dest_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -46,7 +47,7 @@ class SetHumanAndDestination(smach_rcprg.State):
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
+        # self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
         human_name = userdata.human_name.encode('utf-8').decode('utf-8')
@@ -56,9 +57,9 @@ class SetHumanAndDestination(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class CheckHumanState(smach_rcprg.State):
+class CheckHumanState(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['human_name'], output_keys=[],
+        TaskER.BlockingState.__init__(self, input_keys=['human_name'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -79,16 +80,16 @@ class CheckHumanState(smach_rcprg.State):
 
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe '+human_name+u', jak się czujesz?' )
-        rospy.sleep(2)
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację. Dowidzenia.x' )
+        rospy.sleep(3)
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację.' )
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
 
 
-class SayIFinished(smach_rcprg.State):
+class SayIFinished(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self,
+        TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -130,7 +131,7 @@ class HumanFell(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToHumanComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'CheckHumanState', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'human_pose', 'susp_data':'susp_data'})

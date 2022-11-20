@@ -9,6 +9,7 @@ import actionlib
 import math
 import threading
 import copy
+import yaml
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
@@ -17,11 +18,16 @@ import std_srvs.srv as std_srvs
 
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 
-import smach_rcprg
+from TaskER.TaskER import TaskER
 from task_manager import PoseDescription
-
+import smach_rcprg
+from rcprg_smach.hazard_detector import HazardDetector
+from tiago_smach import tiago_torso_controller
+from pal_common_msgs.msg import DisableAction, DisableActionGoal, DisableGoal
+from control_msgs.msg import PointHeadAction, PointHeadActionGoal, PointHeadGoal
+from actionlib_msgs.msg import GoalID
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 NAVIGATION_MAX_TIME_S = 100
-
 
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
@@ -32,12 +38,15 @@ def makePose(x, y, theta):
     result.orientation.y = q[1]
     result.orientation.z = q[2]
     result.orientation.w = q[3]
-    print result
     return result
 
-class RememberCurrentPose(smach_rcprg.State):
+def getFromPose(pose):
+    roll, pitch, yaw = euler_from_quaternion([pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w])
+    return pose.position.x, pose.position.y, yaw
+
+class RememberCurrentPose(TaskER.BlockingState):
     def __init__(self, sim_mode):
-        smach_rcprg.State.__init__(self, output_keys=['current_pose'],
+        TaskER.BlockingState.__init__(self,tf_freq=10, output_keys=['current_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -88,9 +97,9 @@ class RememberCurrentPose(smach_rcprg.State):
                 return 'shutdown'
             return 'error'
 
-class UnderstandGoal(smach_rcprg.State):
+class UnderstandGoal(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.State.__init__(self, input_keys=['in_current_pose', 'goal_pose'], output_keys=['move_goal'],
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['in_current_pose', 'goal_pose'], output_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -104,9 +113,9 @@ class UnderstandGoal(smach_rcprg.State):
 
         #assert isinstance( userdata.goal_pose, PoseDescription )
 
-        print userdata.goal_pose
+        print "GOAL_POSE: ", userdata.goal_pose
         if 'place_name' in userdata.goal_pose.parameters:
-            place_name = userdata.goal_pose.parameters['place_name']
+            place_name = userdata.goal_pose.parameters['place_name'].lower()
             pose_valid = False
             place_name_valid = True
             pose = None
@@ -150,20 +159,34 @@ class UnderstandGoal(smach_rcprg.State):
 
                 current_pose = userdata.in_current_pose
                 pt_start = (current_pose.parameters['pose'].position.x, current_pose.parameters['pose'].position.y)
-
+                print "pt_start: ", pt_start
                 try:
                     pl = self.kb_places.getPlaceByName(place_name, mc_name)
                 except:
                     userdata.move_goal = PoseDescription( {'pose':pose, 'place_name':place_name} )
                     print 'UnderstandGoal place_name is not valid'
                     return 'error'
+                    #NORM:  [-0.9667981925794608, 0.25554110202683233]
+#angle_dest:  -2.88318530718
+# NORM:  (-1.0, 0.0)
+# angle_dest:  0.972464864357
+# pt_dest:  (3.6, 2.0)
 
+#
                 if pl.getType() == 'point':
-                    pt_dest = pl.getPt()
-                    norm = pl.getN()
+                    if pl.isDestinationHuman():
+                        human_pose = yaml.load(rospy.get_param(place_name+'/pose'))
+                        pt_dest = human_pose['x'], human_pose['y']
+                        norm = math.cos(human_pose['theta']), math.sin(human_pose['theta'])
+                    else: 
+                        pt_dest = pl.getPt()
+                        norm = pl.getN()
+                    print "NORM_0: ", norm[0]
+                    print "NORM_1: ", norm[1]
                     if pl.isDestinationFace():
                         print "HUMAN"
                         print "NORM: ", norm
+                        print "pt_dest: ", pt_dest
                         angle_dest = -math.atan2(norm[1], -norm[0])
                         print "angle_dest: ", angle_dest
                         pt = pt_dest
@@ -180,7 +203,7 @@ class UnderstandGoal(smach_rcprg.State):
                     print 'UnderstandGoal place type: point'
                     print 'pt: {}, pt_dest: {}, norm: {}, angle_dest: {}'.format(pt, pt_dest, norm, angle_dest)
                 elif pl.getType() == 'volumetric':
-                    pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
+                    pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/tmp/')
                     angle_dest = 0.0
                 else:
                     raise Exception('Unknown place type: "' + pl.getType() + '"')
@@ -209,9 +232,49 @@ class UnderstandGoal(smach_rcprg.State):
         userdata.move_goal = result
         return 'ok'
 
-class SayImGoingTo(smach_rcprg.State):
+class SetHeight(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['torso_height'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.sim_mode = sim_mode
+        if self.sim_mode in ['gazebo', 'real']:
+            self.torso_controller = tiago_torso_controller.TiagoTorsoController()
+
+        self.description = u'Zmieniam wysokość'
+
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        if self.sim_mode == 'sim':
+            return 'ok'
+
+        current_height = self.torso_controller.get_torso_height()
+
+        if current_height is None:
+            return 'error'
+
+        if abs(current_height - userdata.torso_height) > 0.05:
+            self.torso_controller.set_torso_height(userdata.torso_height)
+            for i in range(30):
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return 'preemption'
+
+                #if self.conversation_interface.consumeExpected('q_current_task'):
+                #    #self.conversation_interface.addSpeakSentence( u'Zmieniam wysokość.' )
+                #    self.conversation_interface.speakNowBlocking( u'Zmieniam wysokość.' )
+                rospy.sleep(0.1)
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
+
+class SayImGoingTo(TaskER.BlockingState):
+    def __init__(self, sim_mode, conversation_interface):
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -238,9 +301,9 @@ class SayImGoingTo(smach_rcprg.State):
 
         return 'ok'
 
-class SayIdontKnow(smach_rcprg.State):
+class SayIdontKnow(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['move_goal'],
                              outcomes=['ok', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -265,9 +328,9 @@ class SayIdontKnow(smach_rcprg.State):
 
         return 'ok'
 
-class SayIArrivedTo(smach_rcprg.State):
+class SayIArrivedTo(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -292,7 +355,7 @@ class SayIArrivedTo(smach_rcprg.State):
         #self.conversation_interface.addSpeakSentence( 'Dojechałem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
         return 'ok'
 
-class SetNavParams(smach_rcprg.State):
+class SetNavParams(TaskER.BlockingState):
     def __init__(self, sim_mode):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.sim_mode = sim_mode
@@ -319,7 +382,7 @@ class SetNavParams(smach_rcprg.State):
             else:
                 raise Exception('Local planner "' + self.local_planner_name + '" is not supported.')
 
-        smach_rcprg.State.__init__(self, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
+        TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.description = u'Zmieniam parametry ruchu'
@@ -364,7 +427,7 @@ class SetNavParams(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class MoveTo(smach_rcprg.State):
+class MoveToBlocking(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
@@ -374,31 +437,58 @@ class MoveTo(smach_rcprg.State):
         self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.State.__init__(self,
+        TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
-                             input_keys=['move_goal'])
+                             input_keys=['move_goal', 'susp_data'])
+
+        self.description = u'Jadę'
+        self.suspendable_move_to = MoveTo(self.sim_mode,self.conversation_interface)
+
+    def transition_function(self, userdata):
+        return self.suspendable_move_to.transition_function(userdata)
+
+class MoveTo(TaskER.SuspendableState):
+    def __init__(self, sim_mode, conversation_interface):
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.current_pose = Pose()
+        self.is_feedback_received = False
+        self.move_base_status = GoalStatus.PENDING
+        self.is_goal_achieved = False
+        self.sim_mode = sim_mode
+        self.conversation_interface = conversation_interface
+
+        TaskER.SuspendableState.__init__(self,
+                             outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
+                             input_keys=['move_goal', 'susp_data'])
 
         self.description = u'Jadę'
 
+    def set_destination_pose(self, userdata):
+        pass
+
+    def update_destination_pose(self, userdata):
+        return False
+
     def transition_function(self, userdata):
+        global HUMAN_POSE_UPDATE_IN_APPROACH
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
         answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
-
+        self.set_destination_pose(userdata)
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
 
         if self.sim_mode == 'sim':
             for i in range(50):
-                if self.preempt_requested():
+                if self.is_suspension_flag() != None:
                     self.conversation_interface.removeAutomaticAnswer(answer_id)
-                    self.service_preempt()
+                    self.request_preempt()
                     return 'preemption'
 
-                rospy.sleep(0.1)
+                rospy.sleep(0.2)
             self.conversation_interface.removeAutomaticAnswer(answer_id)
             return 'ok'
         else:
@@ -419,7 +509,7 @@ class MoveTo(smach_rcprg.State):
             # userdata.nav_result = action_result.result
 
             start_time = rospy.Time.now()
-
+            last_human_update = rospy.Time.now()
             self.is_goal_achieved = False
             while self.is_goal_achieved == False:
                 # action_feedback.feedback.current_pose = self.current_pose
@@ -444,7 +534,20 @@ class MoveTo(smach_rcprg.State):
                     client.cancel_all_goals()
                     return 'stall'
 
-                if self.preempt_requested():
+                if self.update_destination_pose(userdata):
+                    goal.target_pose.pose = userdata.move_goal.parameters['pose']
+                    client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+                # print "\n\n\n"
+                # print "======================================"
+                # print "susp flag: ", self.is_suspension_flag()
+
+                # data = userdata.susp_data.req_data
+                # print "=================================="
+                # print "data= ", data
+                # print "=================================="
+                # print "======================================"
+                # print "\n\n\n"
+                if self.is_suspension_flag() != None:
                     self.conversation_interface.removeAutomaticAnswer(answer_id)
                     client.cancel_all_goals()
                     self.service_preempt()
@@ -508,7 +611,237 @@ class MoveTo(smach_rcprg.State):
         # Do nothing
         return
 
-class TurnAround(smach_rcprg.State):
+class MoveToHuman(MoveTo):
+    def __init__(self, sim_mode, conversation_interface):
+        self.last_human_pose_update = None
+        self.HUMAN_POSE_UPDATE_IN_APPROACH = 2
+        MoveTo.__init__(self,sim_mode,conversation_interface)
+
+
+    def set_destination_pose(self, userdata):
+        human_pose = getFromPose(userdata.move_goal.parameters['pose'])
+        dest_pose =Pose()
+        dest_pose.position.x = human_pose[0] +1*math.cos(human_pose[2])
+        dest_pose.position.y = human_pose[1] +1*math.sin(human_pose[2])
+        dest_pose.orientation = makePose(0,0,human_pose[2]-math.pi).orientation
+        userdata.move_goal.parameters['pose'] = dest_pose
+    
+    def update_destination_pose(self, userdata):
+        if self.last_human_pose_update is None:
+            self.last_human_pose_update = rospy.Time.now()
+        if rospy.Time.now() < self.last_human_pose_update + rospy.Duration.from_sec(self.HUMAN_POSE_UPDATE_IN_APPROACH):
+            return False
+        self.last_human_pose_update = rospy.Time.now()
+        print "----------- UPDATING HUMAN POSE for MoveTo----------------"
+        human = userdata.move_goal.parameters['place_name']
+        current_human_pose = yaml.load(rospy.get_param(human+'/pose'))
+        dest_pose =Pose()
+        dest_pose.position.x = current_human_pose['x'] +1*math.cos(current_human_pose['theta'])
+        dest_pose.position.y = current_human_pose['y'] +1*math.sin(current_human_pose['theta'])
+        dest_pose.orientation = makePose(0,0,current_human_pose['theta']-math.pi).orientation
+        userdata.move_goal.parameters['pose'] = dest_pose
+        return True
+        
+class MoveToAwareHazards(MoveTo):
+    def __init__(self, sim_mode, conversation_interface):
+        self.hazard_detector = HazardDetector()
+        self.hazard_trigger = False
+        self.sim_mode = sim_mode
+        MoveTo.__init__(self,sim_mode,conversation_interface)
+
+
+    # def move_base_done_cb(self, status, result):
+    #     self.is_goal_achieved = True
+    #     if self.hazard_trigger == True:
+    #         self.move_base_status = status
+    #     self.move_base_status = status
+
+    def transition_function(self, userdata):
+        global HUMAN_POSE_UPDATE_IN_APPROACH
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        place_name = userdata.move_goal.parameters['place_name']
+
+        assert isinstance(place_name, unicode)
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
+        self.set_destination_pose(userdata)
+        pose = userdata.move_goal.parameters['pose']
+        place_name = userdata.move_goal.parameters['place_name']
+
+        if self.sim_mode == 'sim':
+            for i in range(50):
+                if self.is_suspension_flag() != None:
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    self.request_preempt()
+                    return 'preemption'
+
+                rospy.sleep(0.2)
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
+            return 'ok'
+        else:
+            goal = MoveBaseGoal()
+            goal.target_pose.pose = pose
+            goal.target_pose.header.frame_id = 'map'
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+            client.wait_for_server()
+
+            # turn off auto head motion
+            if self.sim_mode not in ['sim', 'gazebo']:
+                client_autonomous_head = actionlib.SimpleActionClient('/pal_head_manager/disable', DisableAction)
+                client_autonomous_head.wait_for_server()
+                client_autonomous_head.send_goal(DisableGoal())
+                # client_autonomous_head.wait_for_result()
+            # move head to detect objects on the floor
+            client_move_head = actionlib.SimpleActionClient('/head_controller/point_head_action', PointHeadAction)
+            client_move_head.wait_for_server()
+            point_head_goal = PointHeadGoal()
+            point_head_goal.target.header.frame_id = 'base_link'
+            point_head_goal.target.point.x = 1.5
+            point_head_goal.pointing_axis.z = 1
+            point_head_goal.pointing_frame = 'xtion_rgb_optical_frame'
+            point_head_goal.min_duration.secs = 1
+            point_head_goal.max_velocity = 1
+            client_move_head.send_goal(point_head_goal)
+            # client_move_head.wait_for_result()
+            # start moving
+            client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+
+            # action_feedback = GoActionFeedback()
+            # action_result = GoActionResult()
+            # action_result.result.is_goal_accomplished = False
+            # userdata.nav_result = action_result.result
+
+            start_time = rospy.Time.now()
+            last_human_update = rospy.Time.now()
+            self.is_goal_achieved = False
+            self.hazard_trigger = False
+            while ( (self.is_goal_achieved == False or self.move_base_status == GoalStatus.PREEMPTED) or self.hazard_trigger == True):
+                # action_feedback.feedback.current_pose = self.current_pose
+
+                # userdata.nav_feedback = action_feedback.feedback
+                # userdata.nav_actual_pose = self.current_pose
+
+                end_time = rospy.Time.now()
+                loop_time = end_time - start_time
+                loop_time_s = loop_time.secs
+
+                if self.__shutdown__:
+                    client.cancel_all_goals()
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    self.service_preempt()
+                    return 'shutdown'
+
+                if loop_time_s > NAVIGATION_MAX_TIME_S:
+                    # break the loop, end with error state
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    rospy.logwarn('State: Navigation took too much time, returning error')
+                    client.cancel_all_goals()
+                    return 'stall'
+
+                if self.update_destination_pose(userdata):
+                    goal.target_pose.pose = userdata.move_goal.parameters['pose']
+                    client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+                self.hazard_trigger, hazard_object = self.hazard_detector.check_hazard()
+                
+                if self.hazard_trigger:
+                    print "HAZARD DETECTED"
+                    print u'Uwaga! Znalazłem {"', hazard_object, u'", biernik} na podłodze. Proszę omiń tą przeszkodę.'
+                    # goal is interrupted by the hazard cancel goal
+                    client.cancel_goal()
+                    answer_id = self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Uwaga! Znalazłem {"' + hazard_object + u'", biernik} na podłodze. Proszę omiń tą przeszkodę.')
+                    rospy.sleep(3)
+                    # goal was interrupted by hazard continue motion
+                    client.wait_for_server()
+                    client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+                    # rospy.sleep(5)
+                    # self.is_goal_achieved = False
+                    # print "MOVE STATUS2: complete ", type(self.move_base_status)
+
+                # print "\n\n\n"
+                # print "======================================"
+                # print "susp flag: ", self.is_suspension_flag()
+
+                # data = userdata.susp_data.req_data
+                # print "=================================="
+                # print "data= ", data
+                # print "=================================="
+                # print "======================================"
+                # print "\n\n\n"
+                if self.is_suspension_flag() != None:
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    client.cancel_all_goals()
+                    self.service_preempt()
+                    return 'preemption'
+
+                rospy.sleep(0.1)
+
+            # Manage state of the move_base action server
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
+            # move head ahead
+            client_move_head.wait_for_server()
+            point_head_goal = PointHeadGoal()
+            print  "point_head_goal:\n", point_head_goal
+            point_head_goal.target.header.frame_id = 'torso_lift_link'
+            point_head_goal.target.point.x = 1
+            point_head_goal.target.point.z = 0.18
+            point_head_goal.pointing_axis.z = 1
+            point_head_goal.pointing_frame = 'xtion_rgb_optical_frame'
+            point_head_goal.min_duration.secs = 1
+            point_head_goal.max_velocity = 1
+            client_move_head.send_goal(point_head_goal)
+
+            # turn on auto head motion
+
+            if self.sim_mode not in ['sim', 'gazebo']:
+                client_autonomous_head = actionlib.SimpleActionClient('/pal_head_manager/disable', DisableAction)
+                client_autonomous_head.cancel_all_goals()
+
+            # Here check move_base DONE status
+            if self.move_base_status == GoalStatus.PENDING:
+                # The goal has yet to be processed by the action server
+                raise Exception('Wrong move_base action status: "PENDING"')
+            elif self.move_base_status == GoalStatus.ACTIVE:
+                # The goal is currently being processed by the action server
+                raise Exception('Wrong move_base action status: "ACTIVE"')
+            elif self.move_base_status == GoalStatus.PREEMPTED:
+                # The goal received a cancel request after it started executing
+                #   and has since completed its execution (Terminal State)
+                return 'preemption'
+            elif self.move_base_status == GoalStatus.SUCCEEDED:
+                # The goal was achieved successfully by the action server (Terminal State)
+                return 'ok'
+            elif self.move_base_status == GoalStatus.ABORTED:
+                # The goal was aborted during execution by the action server due
+                #    to some failure (Terminal State)
+                return 'stall'
+            elif self.move_base_status == GoalStatus.REJECTED:
+                # The goal was rejected by the action server without being processed,
+                #    because the goal was unattainable or invalid (Terminal State)
+                return 'error'
+            elif self.move_base_status == GoalStatus.PREEMPTING:
+                # The goal received a cancel request after it started executing
+                #    and has not yet completed execution
+                raise Exception('Wrong move_base action status: "PREEMPTING"')
+            elif self.move_base_status == GoalStatus.RECALLING:
+                # The goal received a cancel request before it started executing,
+                #    but the action server has not yet confirmed that the goal is canceled
+                raise Exception('Wrong move_base action status: "RECALLING"')
+            elif self.move_base_status == GoalStatus.RECALLED:
+                # The goal received a cancel request before it started executing
+                #    and was successfully cancelled (Terminal State)
+                return 'preemption'
+            elif self.move_base_status == GoalStatus.LOST:
+                # An action client can determine that a goal is LOST. This should not be
+                #    sent over the wire by an action server
+                raise Exception('Wrong move_base action status: "LOST"')
+            else:
+                raise Exception('Wrong move_base action status value: "' + str(self.move_base_status) + '"')
+
+
+
+class TurnAround(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
@@ -518,7 +851,7 @@ class TurnAround(smach_rcprg.State):
         self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.State.__init__(self,
+        TaskER.BlockingState.__init__(self,tf_freq=10,
                              outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
                              input_keys=['current_pose'])
 
@@ -655,7 +988,7 @@ class TurnAround(smach_rcprg.State):
         # Do nothing
         return
 
-class ClearCostMaps(smach_rcprg.State):
+class ClearCostMaps(TaskER.BlockingState):
     def __init__(self, sim_mode):
         assert sim_mode in ['sim', 'gazebo', 'real']
         if sim_mode == 'sim':
@@ -668,7 +1001,7 @@ class ClearCostMaps(smach_rcprg.State):
             #    print "Service call failed: %s"%e
             #    self.clear_costmaps = None
 
-        smach_rcprg.State.__init__(self,
+        TaskER.BlockingState.__init__(self,tf_freq=10,
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.description = u'Czyszczę mapę kosztów'
@@ -688,10 +1021,10 @@ class ClearCostMaps(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class MoveToComplex(smach_rcprg.StateMachine):
+class MoveToComplexBlocking(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
-                                            input_keys=['goal'])
+                                            input_keys=['goal', 'susp_data'])
 
         self.description = u'Jadę do określonego miejsca'
 
@@ -711,10 +1044,10 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-            smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
+            smach_rcprg.StateMachine.add('MoveTo', MoveToBlocking(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
                                     'shutdown':'shutdown'},
-                                    remapping={'move_goal':'move_goal'})
+                                    remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -729,6 +1062,89 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
+class MoveToComplex(smach_rcprg.StateMachine):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
+                                            input_keys=['goal', 'susp_data'])
+
+        self.description = u'Jadę do określonego miejsca'
+
+        with self:
+            smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
+                                    transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'current_pose':'current_pose'})
+
+            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
+                                    'shutdown':'shutdown'},
+                                    remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('MoveTo', MoveToAwareHazards(sim_mode, conversation_interface),
+                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
+
+            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'})
+
+            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
+                                    transitions={'ok':'FAILED', 'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+class MoveToHumanComplex(smach_rcprg.StateMachine):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
+                                            input_keys=['goal', 'susp_data'])
+
+        self.description = u'Jadę do określonego miejsca'
+
+        with self:
+            smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
+                                    transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'current_pose':'current_pose'})
+
+            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
+                                    'shutdown':'shutdown'},
+                                    remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('MoveTo', MoveToHuman(sim_mode, conversation_interface),
+                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
+
+            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'})
+
+            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
+                                    transitions={'ok':'FAILED', 'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal','goal':'move_goal'})
+
+
 #    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
 #            self.description = u'Gdzieś jadę'
@@ -737,6 +1153,53 @@ class MoveToComplex(smach_rcprg.StateMachine):
 #            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
 #        return super(MoveToComplex, self).transition_function(userdata)
 
+# class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
+#     def __init__(self, sim_mode, conversation_interface, kb_places):
+#         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
+#                                             input_keys=['goal'])
+
+#         self.userdata.default_height = 0.2
+
+#         self.description = u'Jadę do określonego miejsca'
+
+#         with self:
+#             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
+#                                     transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
+#                                     'shutdown':'shutdown'},
+#                                     remapping={'current_pose':'current_pose'})
+
+#             smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
+#                                     transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
+#                                     'shutdown':'shutdown'},
+#                                     remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
+
+#             smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
+#                                     transitions={'ok':'SetHeightMid', 'preemption':'PREEMPTED', 'error': 'FAILED',
+#                                     'shutdown':'shutdown'},
+#                                     remapping={'move_goal':'move_goal'})
+
+#             smach_rcprg.StateMachine.add('SetHeightMid', SetHeight(sim_mode, conversation_interface),
+#                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+#                                     'shutdown':'shutdown'},
+#                                     remapping={'torso_height':'default_height'})
+
+#             smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
+#                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
+#                                     'shutdown':'shutdown'},
+#                                     remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
+
+#             smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
+#                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+#                                     'shutdown':'shutdown'})
+
+#             smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
+#                                     transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+#                                     'shutdown':'shutdown'},
+#                                     remapping={'move_goal':'move_goal'})
+
+#             smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
+#                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
+#                                     remapping={'move_goal':'move_goal'})
 
 #    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
