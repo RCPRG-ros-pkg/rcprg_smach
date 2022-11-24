@@ -27,7 +27,7 @@ import subprocess
 import imp
 
 def ptf_csp(ptf_id):
-    print "calculating SP: ", ptf_id
+    # print "calculating SP: ", ptf_id
     # set flag 'self-terminate' to terminate DA if in Wait or Init state
     flag = None
     if ptf_id[0] == "scheduleParams":
@@ -40,13 +40,23 @@ def ptf_csp(ptf_id):
         req = CostConditionsRequest()
         req = ptf_id[1]
         return flag, CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)
+
+def find_intent_name(task_parameters):
+    for idx in range(0, len(task_parameters), 2):
+        if task_parameters[idx] == 'intent_name':
+            return task_parameters[idx+1];
+    return None;
+
 class MyTaskER(TaskER):
-    def __init__(self,da_state_name, da_name):
+    def __init__(self,da_state_name, da_name, task_parameters=[]):
         self.name = da_name
+        self.intent_name = find_intent_name(task_parameters)
+        print 'MyTaskER. intent_name: ', self.intent_name
         rospy.init_node(self.name)
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
+        self.task_parameters = task_parameters
         TaskER.__init__(self,da_state_name)
         self.sis = smach_ros.IntrospectionServer(str("/"+self.name+"smach_view_server"), self, self.name)
         self.sis.start()
@@ -57,17 +67,16 @@ class MyTaskER(TaskER):
         print 'Reading KB for places from file "' + places_xml_filename + '"'
         self.kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
-
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
-                ('ack',             'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
-                ('ack_i_took',      'ack_i_took'),
-                ('ack_i_gave',      'ack_i_gave'),
+                ('ack',             'projects/robot-rico-qrct/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
+                ('ack_i_took',      'projects/robot-rico-qrct/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b'),
+                ('ack_i_gave',      'projects/robot-rico-qrct/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629'),
                 ('q_current_task',  'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
-                ('follow_up_question', 'follow_up_question'),
-            ], self.sim_mode)
-        self.my_fsm = rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places)
+                ('follow_up_question', 'projects/robot-rico-qrct/agent/intents/e7e0f71a-fadd-4721-bb07-fb6eaff65fcc'),
+            ], self.sim_mode, self.intent_name)
+        self.my_fsm = rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places, self.task_parameters)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -130,7 +139,7 @@ class MyTaskER(TaskER):
 
         imp.reload(rcprg_smach.bring_goods_new_tasker)
         print "SWAPPING"
-        self.swap_state('ExecFSM', rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places))
+        self.swap_state('ExecFSM', rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places, self.task_parameters))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
@@ -138,44 +147,54 @@ class MyTaskER(TaskER):
         print "My TASKER -- initialise"
         if len(sys.argv) < 3:
             raise Exception('Too few arguments: ' + str(sys.argv))
+        dictionary = DisctionaryServiceClient()
 
         goods_name = None
         for idx in range(1, len(sys.argv), 2):
-            if sys.argv[idx] == 'przedmiot':
-                goods_name = sys.argv[idx+1]
+            arg_name = sys.argv[idx]
+            arg_value = sys.argv[idx + 1]
 
-        if goods_name is None:
-            raise Exception('Argument "goods_name" is missing in argv: ' + str(sys.argv))        
+            print arg_name, arg_value
 
-        if isinstance(goods_name, str):
-            goods_name = goods_name.decode('utf-8')
-        goods_name = goods_name.encode('utf-8').decode('utf-8')
+            if isinstance(arg_value, str):
+                arg_value = arg_value.decode('utf-8')
+            arg_value = arg_value.encode('utf-8').decode('utf-8')
 
-        dictionary = DisctionaryServiceClient()
-        goods_name_m = dictionary.getCases(goods_name).getCase('mianownik')
+            if arg_name == 'przedmiot':
+                arg_value = dictionary.getCases(arg_value).getCase('mianownik')
+                self.userdata.goal = arg_value
+
+            setattr(self.userdata, arg_name, arg_value)
+
+        # if goods_name is None:
+        #     raise Exception('Argument "goods_name" is missing in argv: ' + str(sys.argv))
 
         self.conversation_interface.start()
-
-        self.userdata.goal = goods_name_m
         self.userdata.fsm_es = ""
+
 def main():
     da_name = None
     da_type = None
     da_id = None
+    task_parameters = []
     da_state_name = []
     for idx in range(1, len(sys.argv), 2):
                 if sys.argv[idx] == 'da_name':
                     da_name = sys.argv[idx+1]
-                if sys.argv[idx] == 'da_type':
+                elif sys.argv[idx] == 'da_type':
                     da_type = sys.argv[idx+1]
-                if sys.argv[idx] == 'da_id':
+                elif sys.argv[idx] == 'da_id':
                     da_id = sys.argv[idx+1]
+                else:
+                    task_parameters.append(sys.argv[idx])
+                    task_parameters.append(sys.argv[idx+1])
+    print 'Params passed to bring_goods_new_tasker and going to be passed to bring_goods_new_tasker.py: ', task_parameters
     if da_name == None or da_type == None or da_id == None:
         print "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified"
         return 1
     da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name )
     print "RUN BRING"
-    da.run( MyTaskER(da_state_name,da_name) )
+    da.run( MyTaskER(da_state_name,da_name, task_parameters) )
     print "BG ENDED"
     return 0
 

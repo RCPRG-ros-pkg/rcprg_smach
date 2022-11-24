@@ -232,6 +232,8 @@ class UnderstandGoal(TaskER.BlockingState):
         userdata.move_goal = result
         return 'ok'
 
+
+
 class SetHeight(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         TaskER.BlockingState.__init__(self,tf_freq=10, input_keys=['torso_height'],
@@ -252,6 +254,8 @@ class SetHeight(TaskER.BlockingState):
             return 'ok'
 
         current_height = self.torso_controller.get_torso_height()
+
+        print current_height
 
         if current_height is None:
             return 'error'
@@ -399,17 +403,13 @@ class SetNavParams(TaskER.BlockingState):
             # setting planner params so it the robot moves slowly
             # params = userdata.set_nav_params_params
             # Differrent planners have different parameters
-            if self.local_planner_name == 'PalLocalPlanner':
-                params = {
-                    'max_vel_x': max_lin_vel,
-                    'acc_lim_x': max_lin_accel
-                }
-            elif self.local_planner_name == 'EBandPlannerROS':
+            
+            if self.local_planner_name == 'EBandPlannerROS':
                 params = {
                     'max_vel_lin': max_lin_vel,
                     'max_acceleration': max_lin_accel
                 }
-            elif self.local_planner_name == 'TebLocalPlannerROS':
+            elif self.local_planner_name == 'PalLocalPlanner' or self.local_planner_name == 'TebLocalPlannerROS':
                 params = {
                     'max_vel_x': max_lin_vel,
                     'acc_lim_x': max_lin_accel
@@ -446,6 +446,34 @@ class MoveToBlocking(TaskER.BlockingState):
 
     def transition_function(self, userdata):
         return self.suspendable_move_to.transition_function(userdata)
+
+class SetObjectPose(TaskER.BlockingState):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        TaskER.BlockingState.__init__(self, input_keys=['object_name', 'original_query'], output_keys=['object_pose'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+        self.description = u'Znajduję obiekt i cel'
+        self.kb_places = kb_places
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))        
+
+        if isinstance(userdata.object_name, str):
+            object_name = userdata.object_name.decode('utf-8')
+
+        object_name = userdata.object_name.encode('utf-8').decode('utf-8')
+
+        places_ids = self.kb_places.getPointPlacesIds()
+
+        if unicode(object_name) in places_ids:
+            userdata.object_pose = PoseDescription({'place_name':unicode(object_name)})
+        else:
+            self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Nie mam pozycji '+ object_name+ u' w bazie wiedzy')
+            return 'error'
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
 
 class MoveTo(TaskER.SuspendableState):
     def __init__(self, sim_mode, conversation_interface):
