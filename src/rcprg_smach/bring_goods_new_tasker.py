@@ -15,13 +15,14 @@ from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 import tiago_msgs.msg
 
+from task_database.srv import GetParamsForScenario
+
 import navigation
 from TaskER.TaskER import TaskER
 from rcprg_smach import smach_rcprg
 
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 
-from dynamic_config.config_loader import DynamicConfigParser
 
 import task_manager
 
@@ -39,6 +40,7 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         self.conversation_interface = conversation_interface
 
         self.description = u'Proszę o podanie rzeczy'
+        self.get_params_for_scenario = rospy.ServiceProxy('get_params_for_scenario', GetParamsForScenario)
 
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(
@@ -49,9 +51,7 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         przedmiot = userdata.przedmiot
         object_name = userdata.object_name
 
-        dcp = DynamicConfigParser()
-
-        all_params = dcp.get_params_for_task(userdata.intent_name)        
+        all_params = self.get_params_for_scenario(int(userdata.scenario_id)).params 
 
         additional_data_to_tell = ', '.join(list(map(lambda key: getattr(userdata, key), filter(lambda s: s.startswith('question_'), all_params))))
 
@@ -292,6 +292,7 @@ class SayIFinished(TaskER.BlockingState):
 class BringGoods(smach_rcprg.StateMachine):
 
     def __init__(self, sim_mode, conversation_interface, kb_places, task_parameters):
+        rospy.wait_for_service('get_params_for_scenario')
         input_keys = []
 
         for idx in range(0, len(task_parameters), 2):
