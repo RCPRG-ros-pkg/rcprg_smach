@@ -33,7 +33,6 @@ ACK_WAIT_MAX_TIME_S = 30
 
 class SayAskKeeperForGoods(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, input_keys):
-
         TaskER.BlockingState.__init__(self, input_keys=['object_name']+input_keys, output_keys=['q_load_answer_id'],
                                       outcomes=['ok', 'preemption', 'error', 'shutdown', 'timeout', 'follow_up_question'])
 
@@ -51,7 +50,7 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         przedmiot = userdata.przedmiot
         object_name = userdata.object_name
 
-        all_params = self.get_params_for_scenario(int(userdata.scenario_id)).params 
+        all_params = self.get_params_for_scenario(int(userdata.scenario_id), False).params 
 
         additional_data_to_tell = ', '.join(list(map(lambda key: getattr(userdata, key), filter(lambda s: s.startswith('question_'), all_params))))
 
@@ -59,8 +58,11 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         print 'object_name', object_name
         print 'przedmiot', przedmiot
 
+        if additional_data_to_tell:
+            additional_data_to_tell += '.'
+
         self.conversation_interface.speakNowBlocking(
-            u'niekorzystne warunki pogodowe Hej, {"' + object_name + u'", wolacz}, podaj proszę {"' + przedmiot + u'", biernik}. ' + additional_data_to_tell + u'. Po podaniu potwierdź')
+            u'niekorzystne warunki pogodowe Hej, {"' + object_name + u'", wolacz}, podaj proszę {"' + przedmiot + u'", biernik}. ' + additional_data_to_tell + u' Po podaniu potwierdź')
         
         print 'asked.'
 
