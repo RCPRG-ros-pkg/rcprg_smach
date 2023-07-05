@@ -87,7 +87,7 @@ class IntroduceTask(TaskER.BlockingState):
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
         human_name = userdata.human_name.encode('utf-8').decode('utf-8')
-        if human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzysztof"]:
+        if human_name in ["John", "Peter","keeper","Gustaw","Maciej","Krzysztof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
@@ -125,7 +125,7 @@ class Goodbye(TaskER.BlockingState):
             userdata.human_name = userdata.human_name.decode('utf-8')
         userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
 
-        if userdata.human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzysztof"]:
+        if userdata.human_name in ["John", "Peter","keeper","Gustaw","Maciej","Krzysztof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"

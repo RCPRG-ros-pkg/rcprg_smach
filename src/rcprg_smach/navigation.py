@@ -292,8 +292,8 @@ class SayImGoingTo(TaskER.BlockingState):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        #self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
+        #self.conversation_interface.addSpeakSentence( u'i\'m going to {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe i\'m going to ' + place_name  )
 
         if self.preempt_requested():
             #self.conversation_interface.removeExpected('q_current_task')
@@ -348,7 +348,7 @@ class SayIArrivedTo(TaskER.BlockingState):
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe dojechałem do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe I came to ' + place_name )
 
         if self.preempt_requested():
             self.service_preempt()
@@ -504,7 +504,7 @@ class MoveTo(TaskER.SuspendableState):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe i\'m going to ' + place_name )
         self.set_destination_pose(userdata)
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
@@ -691,7 +691,7 @@ class MoveToAwareHazards(MoveTo):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe i\'m going to ' + place_name )
         self.set_destination_pose(userdata)
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
@@ -1054,7 +1054,7 @@ class MoveToComplexBlocking(smach_rcprg.StateMachine):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
                                             input_keys=['goal', 'susp_data'])
 
-        self.description = u'Jadę do określonego miejsca'
+        self.description = u'i\'m going to particular place'
 
         with self:
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
@@ -1095,7 +1095,7 @@ class MoveToComplex(smach_rcprg.StateMachine):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
                                             input_keys=['goal', 'susp_data'])
 
-        self.description = u'Jadę do określonego miejsca'
+        self.description = u'i\'m going to particular place'
 
         with self:
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
@@ -1136,7 +1136,7 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
                                             input_keys=['goal', 'susp_data'])
 
-        self.description = u'Jadę do określonego miejsca'
+        self.description = u'i\'m going to particular place'
 
         with self:
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
@@ -1178,7 +1178,7 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
 #            self.description = u'Gdzieś jadę'
 #        else:
 #            place_name = userdata.goal.parameters['place_name']
-#            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
+#            self.description = u'i\'m going to {"' + place_name + u'", dopelniacz}'
 #        return super(MoveToComplex, self).transition_function(userdata)
 
 # class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
@@ -1188,7 +1188,7 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
 
 #         self.userdata.default_height = 0.2
 
-#         self.description = u'Jadę do określonego miejsca'
+#         self.description = u'i\'m going to określonego miejsca'
 
 #         with self:
 #             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
@@ -1234,5 +1234,5 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
 #            self.description = u'Gdzieś jadę'
 #        else:
 #            place_name = userdata.goal.parameters['place_name']
-#            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
+#            self.description = u'i\'m going to {"' + place_name + u'", dopelniacz}'
 #        return super(MoveToComplexTorsoMid, self).transition_function(userdata)

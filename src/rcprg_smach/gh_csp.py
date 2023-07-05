@@ -35,7 +35,7 @@ def makePose(x, y, theta):
 class GH_csp():
     def __init__(self, human_name):
         self.human_name = human_name
-        if self.human_name == "Tomek":
+        if self.human_name == "keeper":
             # walk factor for human 0
             self.factor_walk = 0.65#0.15
             # sit factor for human 0

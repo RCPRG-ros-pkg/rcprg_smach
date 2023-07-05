@@ -75,13 +75,13 @@ class MyTaskER(TaskER):
         self.kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
-                ('ack',             'projects/robot-rico-qrct/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
-                ('ack_i_took',      'projects/robot-rico-qrct/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b'),
-                ('ack_i_gave',      'projects/robot-rico-qrct/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629'),
-                ('q_current_task',  'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
-                ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
-                ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
-                ('follow_up_question', 'projects/robot-rico-qrct/agent/intents/e7e0f71a-fadd-4721-bb07-fb6eaff65fcc'),
+                ('ack',             'projects/robot-rico-qrct/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'), # potwierdzam
+                ('ack_i_took',      'projects/robot-rico-qrct/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b'), # odebralem
+                ('ack_i_gave',      'projects/robot-rico-qrct/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629'), # podalem
+                ('q_current_task',  'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'), # co robisz
+                ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'), # co wieziesz
+                ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'), # obroc sie
+                ('follow_up_question', 'projects/robot-rico-qrct/agent/intents/e7e0f71a-fadd-4721-bb07-fb6eaff65fcc'), # follow up question
             ], self.sim_mode, self.scenario_id, self.intent_name)
         self.my_fsm = rcprg_smach.bring_goods_new_tasker.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places, self.task_parameters)
     def shutdownRequest(self):
