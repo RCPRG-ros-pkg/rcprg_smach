@@ -27,7 +27,11 @@ from pal_common_msgs.msg import DisableAction, DisableActionGoal, DisableGoal
 from control_msgs.msg import PointHeadAction, PointHeadActionGoal, PointHeadGoal
 from actionlib_msgs.msg import GoalID
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from rico_context.msg import HistoryEvent
+
 NAVIGATION_MAX_TIME_S = 100
+
+pub_context = rospy.Publisher('/context/push', HistoryEvent, queue_size=10)
 
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
@@ -45,7 +49,7 @@ def getFromPose(pose):
     return pose.position.x, pose.position.y, yaw
 
 class RememberCurrentPose(TaskER.BlockingState):
-    def __init__(self, sim_mode):
+    def __init__(self, sim_mode, conversation_interface=None):
         TaskER.BlockingState.__init__(self,tf_freq=10, output_keys=['current_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
@@ -220,7 +224,11 @@ class UnderstandGoal(TaskER.BlockingState):
 
         assert isinstance(place_name, unicode)
 
+        print 'UnderstandGoal place_name: ', place_name
+
         result = PoseDescription( {'pose':pose, 'place_name':place_name} )
+
+        print 'UnderstandGoal result: ', result
 
         if self.preempt_requested():
             self.service_preempt()
@@ -287,6 +295,8 @@ class SayImGoingTo(TaskER.BlockingState):
 
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        print userdata.move_goal
 
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']

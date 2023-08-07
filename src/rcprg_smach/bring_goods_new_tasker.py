@@ -17,7 +17,7 @@ import tiago_msgs.msg
 import std_msgs
 
 from task_database.srv import GetParamsForScenario
-from language_processor.srv import GenerateSentenceBasedOnContext
+from language_processor.srv import InitiateConvBasedOnCtx
 from rico_context.srv import GetContext
 from rico_context.msg import HistoryEvent
 
@@ -53,43 +53,26 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
 
         rospy.sleep(1.0)
 
-        initiate_conv_based_on_ctx = rospy.ServiceProxy('initiate_conv_based_on_ctx', GenerateSentenceBasedOnContext)
-
-        # assert isinstance(userdata.przedmiot, unicode)
-
-        # przedmiot = userdata.przedmiot
-        # object_name = userdata.object_name
-
-        # all_params = self.get_params_for_scenario(int(userdata.scenario_id), False).params 
-
-
-        # additional_data_to_tell = ', '.join(list(map(lambda key: getattr(userdata, key), filter(lambda s: s.startswith('question_'), all_params))))
-
-        # print 'additional_data_to_tell', additional_data_to_tell
-        # print 'object_name', object_name
-        # print 'przedmiot', przedmiot
-
-        # if additional_data_to_tell:
-        #     additional_data_to_tell += '.'
+        initiate_conv_based_on_ctx = rospy.ServiceProxy('initiate_conv_based_on_ctx', InitiateConvBasedOnCtx)
 
         sentence = initiate_conv_based_on_ctx()
 
-        #@TODO: contruct this with GPT
         self.conversation_interface.speakNowBlocking(
             u'niekorzystne warunki pogodowe ' + sentence.sentence)
 
         print 'asked.'
 
-        self.conversation_interface.addExpected('ack')
-        self.conversation_interface.addExpected('ack_i_gave')
-        self.conversation_interface.addExpected('turn_around')
-        self.conversation_interface.addExpected('follow_up_question')
+        self.conversation_interface.addExpected('confirm')
+        self.conversation_interface.addExpected('User gave')
+        self.conversation_interface.addExpected('turn around')
+        # self.conversation_interface.addExpected('follow_up_question')
 
-        self.conversation_interface.setAutomaticAnswer(
-            'follow_up_question', u'niekorzystne warunki pogodowe i\'m going topytywać')
+        # self.conversation_interface.setAutomaticAnswer(
+        #     'follow_up_question', u'niekorzystne warunki pogodowe i\'m going to request additional information')
 
         answer_id = self.conversation_interface.setAutomaticAnswer(
-            'q_current_task', u'niekorzystne warunki pogodowe czekam na położenie {"' + przedmiot + u'", dopelniacz}')
+            'what are you doing', u'niekorzystne warunki pogodowe czekam na położenie przedmiotu')
+        
 
         userdata.q_load_answer_id = None
 
@@ -104,64 +87,67 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
                 return 'shutdown'
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeExpected('turn_around')
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User gave')
+                self.conversation_interface.removeExpected('turn around')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 return 'timeout'
 
             if self.preempt_requested():
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeExpected('turn_around')
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User gave')
+                self.conversation_interface.removeExpected('turn around')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 self.service_preempt()
                 return 'preemption'
 
-            if self.conversation_interface.consumeExpected('ack') or\
-                    self.conversation_interface.consumeExpected('ack_i_gave'):
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeExpected('turn_around')
+            if self.conversation_interface.consumeExpected('confirm') or\
+                    self.conversation_interface.consumeExpected('User gave'):
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User gave')
+                self.conversation_interface.removeExpected('turn around')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
+                self.conversation_interface.speakNowBlocking(
+                    u'niekorzystne warunki pogodowe thank you. now I need to transport goods to person who requested it. I need to go to place from which I started')
                 answer_id = self.conversation_interface.setAutomaticAnswer(
-                    'q_load', u'niekorzystne warunki pogodowe wiozę {"' + przedmiot + u'", biernik}')
+                    'what are you carrying', u'niekorzystne warunki pogodowe wiozę przedmiot')
                 userdata.q_load_answer_id = answer_id
                 return 'ok'
 
-            follow_up_question = self.conversation_interface.consumeExpected(
-                'follow_up_question')
+            # TODO: HANDLE FOLLOW UP QUESTION
+            # follow_up_question = self.conversation_interface.consumeExpected(
+            #     'follow_up_question')
 
-            if follow_up_question:
-                question_text = follow_up_question.query_text
+            # if follow_up_question:
+            #     question_text = follow_up_question.query_text
 
-                # try:
-                self.conversation_interface.unexpected_question(userdata.original_query.encode('utf-8'), question_text, [
-                                                                    {'name': 'przedmiot', 'value': przedmiot}])
-                # except:
-                #     raise Exception('Error while handling unexpected question')
+            #     # try:
+            #     self.conversation_interface.unexpected_question(userdata.original_query.encode('utf-8'), question_text, [
+            #                                                         {'name': 'item', 'value': item}])
+            #     # except:
+            #     #     raise Exception('Error while handling unexpected question')
 
-                self.conversation_interface.setContext(
-                    'follow_up_question', unicode(question_text, 'utf-8')
-                )
+            #     self.conversation_interface.setContext(
+            #         'follow_up_question', unicode(question_text, 'utf-8')
+            #     )
 
-                self.conversation_interface.removeExpected(
-                    'follow_up_question')
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeExpected('turn_around')
+            #     self.conversation_interface.removeExpected(
+            #         'follow_up_question')
+            #     self.conversation_interface.removeExpected('ack')
+            #     self.conversation_interface.removeExpected('ack_i_gave')
+            #     self.conversation_interface.removeExpected('turn_around')
 
-                self.conversation_interface.removeAutomaticAnswer(answer_id)
-                answer_id = self.conversation_interface.setAutomaticAnswer(
-                    'q_load', u'niekorzystne warunki pogodowe i\'m going topytywać')
-                userdata.q_load_answer_id = answer_id
+            #     self.conversation_interface.removeAutomaticAnswer(answer_id)
+            #     answer_id = self.conversation_interface.setAutomaticAnswer(
+            #         'q_load', u'niekorzystne warunki pogodowe i\'m going topytywać')
+            #     userdata.q_load_answer_id = answer_id
 
-                return 'follow_up_question'
+            #     return 'follow_up_question'
 
-            if self.conversation_interface.consumeExpected('turn_around'):
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeExpected('turn_around')
+            if self.conversation_interface.consumeExpected('turn around'):
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User gave')
+                self.conversation_interface.removeExpected('turn around')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 return 'turn_around'
 
@@ -182,33 +168,48 @@ class TellInfoFromKeeper(TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(
             rospy.get_name(), self.__class__.__name__))
 
-        assert isinstance(userdata.przedmiot, unicode)
+        # assert isinstance(userdata.item, unicode)
 
-        przedmiot = userdata.przedmiot
+        # item = userdata.item
 
-        follow_up_question = self.conversation_interface.getContext(
-            'follow_up_question')
+        # follow_up_question = self.conversation_interface.getContext(
+        #     'follow_up_question')
 
-        #self.conversation_interface.addSpeakSentence( u'Odbierz {"' + przedmiot + u'", biernik} i potwierdź' )
+        #self.conversation_interface.addSpeakSentence( u'Odbierz {"' + item + u'", biernik} i potwierdź' )
 
-        if follow_up_question:
-            self.conversation_interface.speakNowBlocking(
-                u'niekorzystne warunki pogodowe Opiekun zadał pytanie.')
-            self.conversation_interface.trigger_dialogflow_with_text(
-                userdata.original_query)
-            return 'restart'
+        pub_context.publish(HistoryEvent('Rico', 'came back to', 'senior', ''))
+        pub_context.publish(HistoryEvent('Senior', 'see', 'Rico', ''))
+        pub_context.publish(HistoryEvent('Senior', 'say', 'What\'s up with my request?', ''))
 
-        else:
-            self.conversation_interface.speakNowBlocking(
-                u'niekorzystne warunki pogodowe odbierz {"' + przedmiot + u'", biernik} i potwierdź')
+        rospy.sleep(1.0)
 
-        self.conversation_interface.addExpected('ack')
-        self.conversation_interface.addExpected('ack_i_took')
-        self.conversation_interface.addExpected('turn_around')
-        self.conversation_interface.addExpected('follow_up_answer')
+        initiate_conv_based_on_ctx = rospy.ServiceProxy('initiate_conv_based_on_ctx', InitiateConvBasedOnCtx)
+
+        sentence = initiate_conv_based_on_ctx()
+
+        self.conversation_interface.speakNowBlocking(
+            u'niekorzystne warunki pogodowe ' + sentence.sentence)
+
+        print 'told info from keeper'
+
+        # if follow_up_question:
+        #     self.conversation_interface.speakNowBlocking(
+        #         u'niekorzystne warunki pogodowe Opiekun zadał pytanie.')
+        #     self.conversation_interface.trigger_dialogflow_with_text(
+        #         userdata.original_query)
+        #     return 'restart'
+
+        # else:
+        #     self.conversation_interface.speakNowBlocking(
+        #         u'niekorzystne warunki pogodowe odbierz {"' + item + u'", biernik} i potwierdź')
+
+        self.conversation_interface.addExpected('confirm')
+        self.conversation_interface.addExpected('User received')
+        self.conversation_interface.addExpected('turn around')
+        # self.conversation_interface.addExpected('follow_up_answer')
 
         answer_id = self.conversation_interface.setAutomaticAnswer(
-            'q_current_task', u'niekorzystne warunki pogodowe czekam na odebranie {"' + przedmiot + u'", dopelniacz}')
+            'what are you doing', u'niekorzystne warunki pogodowe czekam na odebranie przedmiotu')
 
         start_time = rospy.Time.now()
         while True:
@@ -220,19 +221,19 @@ class TellInfoFromKeeper(TaskER.BlockingState):
                 return 'shutdown'
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeExpected('turn_around')
-                self.conversation_interface.removeExpected('follow_up_answer')
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('turn around')
+                # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 # Do not remove q_load_answer, because we want to enter this state again
                 return 'timeout'
 
             if self.preempt_requested():
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeExpected('turn_around')
-                self.conversation_interface.removeExpected('follow_up_answer')
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('turn around')
+                # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 if not userdata.q_load_answer_id is None:
                     self.conversation_interface.removeAutomaticAnswer(
@@ -240,44 +241,44 @@ class TellInfoFromKeeper(TaskER.BlockingState):
                 self.service_preempt()
                 return 'preemption'
 
-            if self.conversation_interface.consumeExpected('ack') or\
-                    self.conversation_interface.consumeExpected('ack_i_took'):
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeExpected('turn_around')
-                self.conversation_interface.removeExpected('follow_up_answer')
+            if self.conversation_interface.consumeExpected('confirm') or\
+                    self.conversation_interface.consumeExpected('User received'):
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('turn around')
+                # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 if not userdata.q_load_answer_id is None:
                     self.conversation_interface.removeAutomaticAnswer(
                         userdata.q_load_answer_id)
                 return 'ok'
 
-            if self.conversation_interface.consumeExpected('turn_around'):
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeExpected('turn_around')
-                self.conversation_interface.removeExpected('follow_up_answer')
+            if self.conversation_interface.consumeExpected('turn around'):
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('turn around')
+                # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 return 'turn_around'
 
-            if self.conversation_interface.consumeExpected('follow_up_answer'):
-                [question_text] = follow_up_question.param_values
-                print 'question text', question_text
+            # if self.conversation_interface.consumeExpected('follow_up_answer'):
+            #     [question_text] = follow_up_question.param_values
+            #     print 'question text', question_text
 
-                # TODO modyfikaja agenta
+            #     # TODO modyfikaja agenta
 
-                # respTest = detect_intent_text('robot-rico-qrct', 'me', question_text, 'pl')
-                # print respTest.query_result
+            #     # respTest = detect_intent_text('robot-rico-qrct', 'me', question_text, 'pl')
+            #     # print respTest.query_result
 
-                self.conversation_interface.removeExpected('ack')
-                self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeExpected('turn_around')
-                self.conversation_interface.removeExpected('follow_up_answer')
-                self.conversation_interface.removeAutomaticAnswer(answer_id)
-                if not userdata.q_load_answer_id is None:
-                    self.conversation_interface.removeAutomaticAnswer(
-                        userdata.q_load_answer_id)
-                return 'follow_up_answer'
+            #     self.conversation_interface.removeExpected('ack')
+            #     self.conversation_interface.removeExpected('ack_i_took')
+            #     self.conversation_interface.removeExpected('turn_around')
+            #     self.conversation_interface.removeExpected('follow_up_answer')
+            #     self.conversation_interface.removeAutomaticAnswer(answer_id)
+            #     if not userdata.q_load_answer_id is None:
+            #         self.conversation_interface.removeAutomaticAnswer(
+            #             userdata.q_load_answer_id)
+            #     return 'follow_up_answer'
 
             rospy.sleep(0.1)
 
@@ -298,7 +299,9 @@ class SayIFinished(TaskER.BlockingState):
             rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         self.conversation_interface.speakNowBlocking(
-            u'niekorzystne warunki pogodowe zakończyłem zadanie')
+            u'niekorzystne warunki pogodowe I finished performing the task')
+
+        pub_context.publish(HistoryEvent('Rico', 'finish performing', '"bring goods" task', ''))
 
         if self.__shutdown__:
             return 'shutdown'
@@ -339,7 +342,7 @@ class BringGoods(smach_rcprg.StateMachine):
         self.description = u'Podaję rzecz'
 
         with self:
-            smach_rcprg.StateMachine.add('RememberCurrentPose', navigation.RememberCurrentPose(sim_mode),
+            smach_rcprg.StateMachine.add('RememberCurrentPose', navigation.RememberCurrentPose(sim_mode, conversation_interface),
                                          transitions={'ok': 'SetHeightMid', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'shutdown': 'shutdown'},
                                          remapping={'current_pose': 'initial_pose'})
@@ -367,7 +370,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('SayAskKeeperForGoods', SayAskKeeperForGoods(sim_mode, conversation_interface, input_keys),
                                          transitions={'ok': 'MoveBack', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'timeout': 'SayAskKeeperForGoods', 'shutdown': 'shutdown', 'follow_up_question': 'MoveBack'},
-                                         remapping={'przedmiot': 'goal', 'q_load_answer_id': 'q_load_answer_id'})
+                                         remapping={'item': 'goal', 'q_load_answer_id': 'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                          transitions={'FINISHED': 'TellInfoFromKeeper', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
@@ -377,9 +380,9 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('TellInfoFromKeeper', TellInfoFromKeeper(sim_mode, conversation_interface, input_keys),
                                          transitions={'restart': 'FINISHED', 'ok': 'SetHeightEnd', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'shutdown': 'shutdown', 'timeout': 'TellInfoFromKeeper', 'turn_around': 'TurnAroundB1', 'follow_up_answer': 'SetKeeperPose'},
-                                         remapping={'przedmiot': 'goal', 'q_load_answer_id': 'q_load_answer_id'})
+                                         remapping={'item': 'goal', 'q_load_answer_id': 'q_load_answer_id'})
 
-            smach_rcprg.StateMachine.add('TurnAroundB1', navigation.RememberCurrentPose(sim_mode),
+            smach_rcprg.StateMachine.add('TurnAroundB1', navigation.RememberCurrentPose(sim_mode, conversation_interface),
                                          transitions={'ok': 'TurnAroundB2', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'shutdown': 'shutdown'},
                                          remapping={'current_pose': 'current_pose'})

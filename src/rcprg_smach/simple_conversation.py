@@ -19,35 +19,14 @@ import string
 from std_msgs.msg import String
 from task_database.srv import GetScenarioInputs, CloneScenarioWithNewIntent, AddParamsForScenario
 
-# from dialogflow_agent.interfaces.DialogflowAgent import DialogflowAgent
-
 import actionlib
-
-
-# def remove_spaces(string):
-#     result = string.replace(' ', '_')
-
-#     return result
-
-
-# def remove_diacritics(string):
-#     # print string, type(string)
-#     u_text = unicodedata.normalize('NFKD', unicode(string, 'utf-8'))
-#     result = u_text.encode('ascii', 'ignore')
-
-#     return result
-
-# agent_name = 'robot-rico-qrct'
-# cred_file_incare_dialog = os.environ['GOOGLE_CONVERSATIONAL_DIALOGFLOW']
-
 
 #
 # New, high-level interface for conversations
 #
-class ConversationMachine:
-    # item_types is [(query_name, intent_name)]
-    def __init__(self, item_types=[], sim_mode='', scenario_id=None, intent_name=None):
-        print 'ConversationMachine args: ', item_types, sim_mode, scenario_id
+class SimpleConversationMachine:
+    def __init__(self, scenario_id, intent_name, sim_mode=''):
+        print 'SimpleConversationMachine args: ', scenario_id, intent_name
         self.scenario_id = scenario_id
         self.intent_name = intent_name
         rospy.wait_for_service('get_scenario_inputs')
@@ -56,8 +35,10 @@ class ConversationMachine:
         self.get_scenario_inputs = rospy.ServiceProxy('get_scenario_inputs', GetScenarioInputs)
         self.clone_scenario_with_new_intent = rospy.ServiceProxy('clone_scenario_with_new_intent', CloneScenarioWithNewIntent)
         self.add_params_for_scenario = rospy.ServiceProxy('add_params_for_scenario', AddParamsForScenario)
-        self.__item_types__ = item_types if scenario_id is None else list(map(lambda scenario_input: (
-            scenario_input.alias, scenario_input.intent), self.get_scenario_inputs(int(scenario_id)).inputs))
+        self.__item_types__ = list(map(
+            lambda scenario_input: scenario_input.intent,
+            self.get_scenario_inputs(int(scenario_id)).inputs
+        ))
         print self.__item_types__
         #@TODO: send it to lang processor
         self.__stop__ = False
@@ -86,8 +67,8 @@ class ConversationMachine:
         self.txt_pub = rospy.Publisher('/txt_send', String)
 
         # Expected queries
-        self.__expected_query_types__ = set()
-        self.__expected_queries__ = {}
+        self.__expected_intents__ = set()
+        self.__got_expected_intents__ = {}
         #self.__expected_autoremove_dict__ = {}
 
         # Automatic answers
@@ -105,13 +86,6 @@ class ConversationMachine:
         self.__intent_list_lock__.acquire()
         self.__intent_list__.add(data)
         self.__intent_list_lock__.release()
-
-    def __getNameForIntent__(self, intent):
-        assert isinstance(intent, tiago_msgs.msg.Command)
-        for name, in_name in self.__item_types__:
-            if in_name == intent.intent_name:
-                return name
-        return None
 
     def start(self):
         print('CONVERSATION start')
@@ -135,22 +109,23 @@ class ConversationMachine:
         while not self.__stop__:
             self.__intent_list_lock__.acquire()
             for intent in self.__intent_list__:
-                print self.__intent_list__
-                query_type = self.__getNameForIntent__(intent)
-                # Manage expected queries
-                if query_type in self.__expected_query_types__:
-                    self.__expected_queries__[query_type] = intent
+                print 'CONVERSATION intent received: ', intent.intent_name
+
+                intent_name = intent.intent_name
+
+                if intent_name in self.__expected_intents__:
+                    self.__got_expected_intents__[intent_name] = intent
 
                 # Manage automatic answers
-                answer_id_list = self.getAutomaticAnswersIds(query_type)
+                answer_id_list = self.getAutomaticAnswersIds(intent_name)
                 self.__pending_automatic_answers__ = self.__pending_automatic_answers__ + answer_id_list
 
-                print self.__expected_query_types__
+                print self.__expected_intents__
                 print answer_id_list
 
                 # Manage unexpected queries
-                if not query_type in self.__expected_query_types__ and not bool(answer_id_list):
-                    print 'QUERY IS UNEXPECTED'
+                if not intent_name in self.__expected_intents__ and not bool(answer_id_list):
+                    print 'INTENT IS UNEXPECTED'
                     # Add special answer for unexpected intent
                     self.__pending_automatic_answers__.append(-1)
 
@@ -178,17 +153,17 @@ class ConversationMachine:
 
             time.sleep(0.1)
 
-    def setAutomaticAnswer(self, query_type, text):
-        print 'CONVERSATION setAutomaticAnswer', query_type, text
+    def setAutomaticAnswer(self, intent, text):
+        print 'CONVERSATION setAutomaticAnswer', intent, text
 
         assert isinstance(text, unicode)
 
         self.__automatic_answers_id_map__[
-            self.__automatic_answer_id__] = (query_type, text)
-        if not query_type in self.__automatic_answers_name_map__:
-            self.__automatic_answers_name_map__[query_type] = {}
+            self.__automatic_answer_id__] = (intent, text)
+        if not intent in self.__automatic_answers_name_map__:
+            self.__automatic_answers_name_map__[intent] = {}
         self.__automatic_answers_name_map__[
-            query_type][self.__automatic_answer_id__] = text
+            intent][self.__automatic_answer_id__] = text
         self.__automatic_answer_id__ = self.__automatic_answer_id__ + 1
         print 'Successfully setAutomaticAnswer'
         return self.__automatic_answer_id__-1
@@ -214,18 +189,18 @@ class ConversationMachine:
                 break
             self.__intent_list_lock__.release()
             time.sleep(0.1)
-        query_type, text = self.__automatic_answers_id_map__[answer_id]
-        del self.__automatic_answers_name_map__[query_type][answer_id]
+        intent, text = self.__automatic_answers_id_map__[answer_id]
+        del self.__automatic_answers_name_map__[intent][answer_id]
         del self.__automatic_answers_id_map__[answer_id]
         self.__intent_list_lock__.release()
 
-    def getAutomaticAnswersIds(self, query_type):
-        print 'CONVERSATION getAutomaticAnswersIds', query_type
+    def getAutomaticAnswersIds(self, intent):
+        print 'CONVERSATION getAutomaticAnswersIds', intent
 
-        if not query_type in self.__automatic_answers_name_map__:
+        if not intent in self.__automatic_answers_name_map__:
             return []
         result = []
-        for answer_id, text in self.__automatic_answers_name_map__[query_type].iteritems():
+        for answer_id, text in self.__automatic_answers_name_map__[intent].iteritems():
             result.append(answer_id)
         return result
 
@@ -234,7 +209,7 @@ class ConversationMachine:
 
         if answer_id == -1:
             return 'niekorzystne warunki pogodowe nie wiem o co chodzi'
-        query_type, text = self.__automatic_answers_id_map__[answer_id]
+        intent, text = self.__automatic_answers_id_map__[answer_id]
         return text
 
     # Speaks a sentence and waits until it is finished
@@ -260,32 +235,31 @@ class ConversationMachine:
     #    self.rico_says_client.send_goal(goal)
     #    self.rico_says_client.wait_for_result()
 
-    def addExpected(self, query_type):
-        print 'CONVERSATION addExpected', query_type
+    def addExpected(self, intent):
+        print 'CONVERSATION addExpected', intent
         self.__intent_list_lock__.acquire()
-        assert not query_type in self.__expected_query_types__
-        self.__expected_query_types__.add(query_type)
+        assert not intent in self.__expected_intents__
+        self.__expected_intents__.add(intent)
         #self.__expected_autoremove_dict__[query_type] = autoremove
         self.__intent_list_lock__.release()
 
-    def removeExpected(self, query_type):
-        print 'CONVERSATION removeExpected', query_type
+    def removeExpected(self, intent):
+        print 'CONVERSATION removeExpected', intent
         self.__intent_list_lock__.acquire()
-        assert query_type in self.__expected_query_types__
+        assert intent in self.__expected_intents__
         # Consume, if there is any left
-        if query_type in self.__expected_queries__:
-            del self.__expected_queries__[query_type]
-        self.__expected_query_types__.remove(query_type)
+        if intent in self.__got_expected_intents__:
+            del self.__got_expected_intents__[intent]
+        self.__expected_intents__.remove(intent)
         self.__intent_list_lock__.release()
 
-    def consumeExpected(self, query_type):  # , remove):
-        print 'CONVERSATION consumeExpected', query_type  # , remove
+    def consumeExpected(self, intent):  # , remove):
+        print 'CONVERSATION consumeExpected', intent  # , remove
         self.__intent_list_lock__.acquire()
-        if query_type in self.__expected_queries__:
-            result = self.__expected_queries__[query_type]
-            del self.__expected_queries__[query_type]
-            # if remove == True:
-            #    self.__expected_query_types__.remove(query_type)
+
+        if intent in self.__got_expected_intents__:
+            result = self.__got_expected_intents__[intent]
+            del self.__got_expected_intents__[intent]
             self.__intent_list_lock__.release()
             return result
         else:
@@ -295,42 +269,3 @@ class ConversationMachine:
     def startListening(self):
         print('CONVERSATION startListening')
         self.pub.publish(std_msgs.msg.Bool())
-
-    # def setContext(self, key, value):
-    #     print 'setContext', key, value
-    #     self.__context__[key] = value
-
-    # def getContext(self, key):
-    #     if key in self.__context__:
-    #         return self.__context__[key]
-    #     else:
-    #         return None
-
-    # def clearContext(self):
-    #     self.__context__ = {}
-
-    # def unexpected_question(self, original_query, question_text, default_intent_params=[]):
-    #     param_name = 'question_' + remove_spaces(remove_diacritics(question_text))
-    #     parameters = [{'name': param_name, 'prompt': question_text + '?'}]
-
-    #     curr_intent = self.dialogflow_agent.get_intent(self.intent_name)
-
-    #     is_current_intent_autogenerated = self.dialogflow_agent.is_autogenerated(curr_intent)
-
-    #     if is_current_intent_autogenerated:
-    #         self.dialogflow_agent.update_intent_with_parameters(curr_intent, parameters)
-    #         self.add_params_for_scenario(int(self.scenario_id), list(map(lambda param: param['name'], parameters)))
-    #     else:
-    #         intent_display_name = original_query
-    #         trigger_phrases = [original_query]
-
-    #         autoresponses = ['dziękuję']
-    #         response = self.dialogflow_agent.create_intent(
-    #             intent_display_name, True, trigger_phrases, autoresponses, parameters, default_intent_params)
-
-    #         self.clone_scenario_with_new_intent(int(self.scenario_id), response.name, list(
-    #             map(lambda param: param.display_name, response.parameters)))
-
-
-    # def trigger_dialogflow_with_text(self, text):
-    #     self.txt_pub.publish(text)
