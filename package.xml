@@ -1,24 +1,24 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>rcprg_smach</name>
   <version>0.0.0</version>
   <description>The rcprg_smach package</description>
-
-  <maintainer email="5305@pw.edu.pl">Dawid Seredynski</maintainer>
-
-
   <license>TODO</license>
+  
+  <maintainer email="5305@pw.edu.pl">Dawid Seredynski</maintainer>
+  <maintainer email="adam-krawczyk@outlook.com">Adam Krawczyk</maintainer>
 
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>actionlib</depend>
-  <depend>actionlib_msgs</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  
+  <depend>action_msgs</depend>
   <depend>diagnostic_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>roscpp</depend>
-  <depend>move_base_msgs</depend>
-  <depend>rospy</depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
-  <depend>tf</depend>
- 
+  <depend>tf2_ros</depend>
+
+  <!-- Add any additional dependencies here -->
+
 </package>

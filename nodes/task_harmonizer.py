@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf8
 
 import rospkg
@@ -42,7 +42,7 @@ class TaskHarmonizer:
 
         self.task_request_response = None
 
-        print 'ConversationMachine.__init__: waiting for rico_says ActionServer...'
+        print('ConversationMachine.__init__: waiting for rico_says ActionServer...')
         #self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
         #self.rico_says_client.wait_for_server()
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
