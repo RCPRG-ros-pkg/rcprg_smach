@@ -81,8 +81,6 @@ class ConversationMachine:
             "rico_filtered_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
         self.pub = rospy.Publisher(
             '/activate_vad', std_msgs.msg.Bool, queue_size=10)
-        self.intents_pub = rospy.Publisher(
-            '/new_intent', tiago_msgs.msg.NewIntent, queue_size=10)
         self.txt_pub = rospy.Publisher('/txt_send', String)
 
         # Expected queries

@@ -16,7 +16,7 @@ from geometry_msgs.msg import Pose
 import tiago_msgs.msg
 import std_msgs
 
-from task_database.srv import GetParamsForScenario, AddParamsForScenario
+from task_database.srv import GetParamsForScenario, AddParamsForScenario, CloneScenarioWithNewIntent
 from language_processor.srv import InitiateConvBasedOnCtx
 from rico_context.srv import GetContext, ResetContext, ResetContextResponse, ResetContextRequest
 from rico_context.msg import HistoryEvent
@@ -33,6 +33,7 @@ ACK_WAIT_MAX_TIME_S = 30
 
 pub_context = rospy.Publisher('/context/push', HistoryEvent, queue_size=10)
 
+
 class SayAskKeeperForGoods(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, input_keys):
         TaskER.BlockingState.__init__(self, input_keys=input_keys, output_keys=['q_load_answer_id'],
@@ -43,18 +44,22 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         self.description = u'Proszę o podanie rzeczy'
         self.get_params_for_scenario = rospy.ServiceProxy('get_params_for_scenario', GetParamsForScenario)
 
+        self.asked = False
+
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(
             rospy.get_name(), self.__class__.__name__))
         
-        pub_context.publish(HistoryEvent('Rico', 'come to', 'keeper', ''))
-        pub_context.publish(HistoryEvent('Keeper', 'see', 'Rico', ''))
-        pub_context.publish(HistoryEvent('Keeper', 'say', 'Hi Rico, what you need?', ''))
+        if not self.asked:
+            pub_context.publish(HistoryEvent('Rico', 'come to', 'keeper', ''))
+            pub_context.publish(HistoryEvent('Keeper', 'see', 'Rico', ''))
+            pub_context.publish(HistoryEvent('Keeper', 'say', 'Hi Rico, what you need?', ''))
 
         rospy.sleep(1.0)
 
         initiate_conv_based_on_ctx = rospy.ServiceProxy('initiate_conv_based_on_ctx', InitiateConvBasedOnCtx)
         add_params_for_scenario = rospy.ServiceProxy('add_params_for_scenario', AddParamsForScenario)
+        clone_scenario_with_new_intent = rospy.ServiceProxy('clone_scenario_with_new_intent', CloneScenarioWithNewIntent)
 
         sentence = initiate_conv_based_on_ctx()
 
@@ -62,13 +67,12 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
 
         print 'asked.'
 
+        self.asked = True
+
         self.conversation_interface.addExpected('confirm')
         self.conversation_interface.addExpected('User gave')
         self.conversation_interface.addExpected('turn around')
         self.conversation_interface.addExpected('unexpected_question')
-
-        self.conversation_interface.setAutomaticAnswer(
-            'unexpected_question', u'niekorzystne warunki pogodowe i\'m going to request additional information')
 
         answer_id = self.conversation_interface.setAutomaticAnswer(
             'what are you doing', u'niekorzystne warunki pogodowe czekam na położenie przedmiotu')
@@ -120,17 +124,21 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
             if unexpected_question:
                 new_param = unexpected_question.param_values[0]
 
-                add_params_for_scenario(int(userdata.scenario_id), [new_param])
+                is_specific_bringing = userdata.intent_name != 'bring item'
 
-                # try:
-                # self.conversation_interface.unexpected_question(userdata.original_query.encode('utf-8'), question_text, [
-                #                                                     {'name': 'item', 'value': item}])
-                # except:
-                #     raise Exception('Error while handling unexpected question')
+                if is_specific_bringing:
+                    add_params_for_scenario(int(userdata.scenario_id), [new_param])
+                else:
+                    print 'userdata.item', userdata.item
+                    item = userdata.item
+                    new_intent_name = 'bring' + ' ' + item
 
-                # self.conversation_interface.setContext(
-                #     'unexpected_question', unicode(question_text, 'utf-8')
-                # )
+                    print 'new_intent_name', new_intent_name
+
+                    clone_scenario_with_new_intent(
+                        int(userdata.scenario_id), new_intent_name, [new_param])
+                    
+                    print 'cloned'
 
                 self.conversation_interface.removeExpected('unexpected_question')
                 self.conversation_interface.removeExpected('confirm')
@@ -139,11 +147,11 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
 
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 answer_id = self.conversation_interface.setAutomaticAnswer(
-                    'what are you doing', u'niekorzystne warunki pogodowe I\'m going to request additional information from user, regarding "' + new_param + '"')
-                
+                    'what are you doing', u'niekorzystne warunki pogodowe I\'m going to request additional information from user regarding this')
+
                 self.conversation_interface.speakNowBlocking(
-                    u'niekorzystne warunki pogodowe I\'m going to request additional information from user, regarding "' + new_param + '"')
-                
+                    u'niekorzystne warunki pogodowe I\'m going to request additional information from user regarding this')
+
                 userdata.q_load_answer_id = None
 
                 return 'unexpected_question'
@@ -168,6 +176,7 @@ class TellInfoFromKeeper(TaskER.BlockingState):
 
         self.conversation_interface = conversation_interface
         self.description = u'Proszę o odebranie rzeczy'
+        self.told = False
 
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(
@@ -182,9 +191,10 @@ class TellInfoFromKeeper(TaskER.BlockingState):
 
         #self.conversation_interface.addSpeakSentence( u'Odbierz {"' + item + u'", biernik} i potwierdź' )
 
-        pub_context.publish(HistoryEvent('Rico', 'came back to', 'senior', ''))
-        pub_context.publish(HistoryEvent('Senior', 'see', 'Rico', ''))
-        pub_context.publish(HistoryEvent('Senior', 'say', 'What\'s up with my request?', ''))
+        if not self.told:
+            pub_context.publish(HistoryEvent('Rico', 'came back to', 'senior', ''))
+            pub_context.publish(HistoryEvent('Senior', 'see', 'Rico', ''))
+            pub_context.publish(HistoryEvent('Senior', 'say', 'What\'s up with my request?', ''))
 
         rospy.sleep(1.0)
 
@@ -196,6 +206,8 @@ class TellInfoFromKeeper(TaskER.BlockingState):
             u'niekorzystne warunki pogodowe ' + sentence.sentence)
 
         print 'told info from keeper'
+
+        self.told = True
 
         # if unexpected_question:
         #     self.conversation_interface.speakNowBlocking(
@@ -209,7 +221,7 @@ class TellInfoFromKeeper(TaskER.BlockingState):
         #         u'niekorzystne warunki pogodowe odbierz {"' + item + u'", biernik} i potwierdź')
 
         self.conversation_interface.addExpected('confirm')
-        self.conversation_interface.addExpected('User received')
+        self.conversation_interface.addExpected('User recieved')
         self.conversation_interface.addExpected('turn around')
         # self.conversation_interface.addExpected('follow_up_answer')
 
@@ -227,7 +239,7 @@ class TellInfoFromKeeper(TaskER.BlockingState):
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
                 self.conversation_interface.removeExpected('confirm')
-                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('User recieved')
                 self.conversation_interface.removeExpected('turn around')
                 # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
@@ -236,7 +248,7 @@ class TellInfoFromKeeper(TaskER.BlockingState):
 
             if self.preempt_requested():
                 self.conversation_interface.removeExpected('confirm')
-                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('User recieved')
                 self.conversation_interface.removeExpected('turn around')
                 # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
@@ -247,9 +259,9 @@ class TellInfoFromKeeper(TaskER.BlockingState):
                 return 'preemption'
 
             if self.conversation_interface.consumeExpected('confirm') or\
-                    self.conversation_interface.consumeExpected('User received'):
+                    self.conversation_interface.consumeExpected('User recieved'):
                 self.conversation_interface.removeExpected('confirm')
-                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('User recieved')
                 self.conversation_interface.removeExpected('turn around')
                 # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
@@ -260,7 +272,7 @@ class TellInfoFromKeeper(TaskER.BlockingState):
 
             if self.conversation_interface.consumeExpected('turn around'):
                 self.conversation_interface.removeExpected('confirm')
-                self.conversation_interface.removeExpected('User received')
+                self.conversation_interface.removeExpected('User recieved')
                 self.conversation_interface.removeExpected('turn around')
                 # self.conversation_interface.removeExpected('follow_up_answer')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
@@ -321,6 +333,8 @@ class SayIFinished(TaskER.BlockingState):
 
         self.conversation_interface = conversation_interface
 
+        self.reset_context = rospy.ServiceProxy('/context/reset', ResetContext)
+
         self.description = u'Mówię, że zakończyłem'
 
     def transition_function(self, userdata):
@@ -330,7 +344,10 @@ class SayIFinished(TaskER.BlockingState):
         self.conversation_interface.speakNowBlocking(
             u'niekorzystne warunki pogodowe I finished performing the task')
 
-        pub_context.publish(HistoryEvent('Rico', 'finish performing', '"bring goods" task', ''))
+        # pub_context.publish(HistoryEvent('Rico', 'finish performing', '"bring goods" task', ''))
+        # pub_context.publish(HistoryEvent('system', 'finish scenario', userdata.scenario_id, ''))
+
+        self.reset_context()
 
         if self.__shutdown__:
             return 'shutdown'
@@ -344,9 +361,14 @@ class BringGoods(smach_rcprg.StateMachine):
         rospy.wait_for_service('initiate_conv_based_on_ctx')
         input_keys = []
 
+        print 'task_parameters', task_parameters
+
         for idx in range(0, len(task_parameters), 2):
             param_name = task_parameters[idx]
+            param_value = task_parameters[idx+1]
+            
             input_keys.append(param_name)
+
 
         print 'Input keys passed to BringGoods: ', input_keys
 
@@ -356,7 +378,15 @@ class BringGoods(smach_rcprg.StateMachine):
                                           outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED', 'shutdown'])
-        print 'Userdata in BringGoods: ', self.userdata
+        
+
+        for idx in range(0, len(task_parameters), 2):
+            param_name = task_parameters[idx]
+            param_value = task_parameters[idx+1]
+            
+            setattr(self.userdata, param_name, param_value)
+        
+        print 'Item from userdata: ', self.userdata.item
 
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
@@ -398,8 +428,8 @@ class BringGoods(smach_rcprg.StateMachine):
 
             smach_rcprg.StateMachine.add('SayAskKeeperForGoods', SayAskKeeperForGoods(sim_mode, conversation_interface, input_keys),
                                          transitions={'ok': 'MoveBack', 'preemption': 'PREEMPTED', 'error': 'FAILED',
-                                                      'timeout': 'SayAskKeeperForGoods', 'shutdown': 'shutdown', 'unexpected_question': 'MoveBack'},
-                                         remapping={'item': 'goal', 'q_load_answer_id': 'q_load_answer_id'})
+                                                      'timeout': 'SayAskKeeperForGoods', 'shutdown': 'shutdown', 'unexpected_question': 'MoveBackAfterUnexpectedQuestion'},
+                                         remapping={'q_load_answer_id': 'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                          transitions={'FINISHED': 'TellInfoFromKeeper', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
@@ -418,7 +448,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('TellInfoFromKeeper', TellInfoFromKeeper(sim_mode, conversation_interface, input_keys),
                                          transitions={'restart': 'FINISHED', 'ok': 'SetHeightEnd', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'shutdown': 'shutdown', 'timeout': 'TellInfoFromKeeper', 'turn_around': 'TurnAroundB1', 'follow_up_answer': 'SetKeeperPose'},
-                                         remapping={'item': 'goal', 'q_load_answer_id': 'q_load_answer_id'})
+                                         remapping={'q_load_answer_id': 'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('TurnAroundB1', navigation.RememberCurrentPose(sim_mode, conversation_interface),
                                          transitions={'ok': 'TurnAroundB2', 'preemption': 'PREEMPTED', 'error': 'FAILED',

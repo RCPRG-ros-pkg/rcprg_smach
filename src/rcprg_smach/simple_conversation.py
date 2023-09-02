@@ -62,8 +62,6 @@ class SimpleConversationMachine:
             "rico_filtered_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
         self.pub = rospy.Publisher(
             '/activate_vad', std_msgs.msg.Bool, queue_size=10)
-        self.intents_pub = rospy.Publisher(
-            '/new_intent', tiago_msgs.msg.NewIntent, queue_size=10)
         self.txt_pub = rospy.Publisher('/txt_send', String)
 
         # Expected queries
@@ -208,7 +206,7 @@ class SimpleConversationMachine:
         print 'CONVERSATION __getAutomaticAnswerText__', answer_id
 
         if answer_id == -1:
-            return 'niekorzystne warunki pogodowe nie wiem o co chodzi'
+            return 'niekorzystne warunki pogodowe I don\'t understand'
         intent, text = self.__automatic_answers_id_map__[answer_id]
         return text
 
