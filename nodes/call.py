@@ -1,11 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf8
 
 import sys
 import time
 import math
 
-import rospy
+import rclpy
+from rclpy.node import Node
 import smach
 import smach_ros
 
@@ -21,6 +22,7 @@ from rcprg_smach.task_manager import PoseDescription
 
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 
+
 class CheckGoalProximity(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         self.sim_mode = sim_mode
@@ -28,11 +30,12 @@ class CheckGoalProximity(smach_rcprg.State):
         self.kb_places = kb_places
 
         smach_rcprg.State.__init__(self, input_keys=['goal', 'current_pose'],
-                        outcomes=['ok', 'far_away', 'preemption', 'shutdown'])
+                                   outcomes=['ok', 'far_away', 'preemption', 'shutdown'])
 
     def execute(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        print 'CheckGoalProximity.execute'
+        rclpy.loginfo('{}: Executing state: {}'.format(
+            rclpy.get_name(), self.__class__.__name__))
+        print('CheckGoalProximity.execute')
 
         if self.sim_mode == 'sim':
             self.conversation_interface.startListening()
@@ -44,27 +47,28 @@ class CheckGoalProximity(smach_rcprg.State):
             mc_name = 'sim'
 
         goal_palce_name = userdata.goal.parameters['place_name']
-        goal_pl = self.kb_places.getPlaceByName( goal_palce_name, mc_name )
+        goal_pl = self.kb_places.getPlaceByName(goal_palce_name, mc_name)
 
         current_pose = userdata.current_pose.parameters['pose']
 
         current_place_pos = (current_pose.position.x, current_pose.position.y)
-        #current_pl_id = self.kb_places.whatIsAt( current_place_pos, mc_name )
-        #print 'CheckGoalProximity current_pl_id', current_pl_id
-        #current_pl = self.kb_places.getPlaceById(current_pl_id, mc_name)
+        # current_pl_id = self.kb_places.whatIsAt( current_place_pos, mc_name )
+        # print 'CheckGoalProximity current_pl_id', current_pl_id
+        # current_pl = self.kb_places.getPlaceById(current_pl_id, mc_name)
 
         if goal_pl.getType() == 'point':
             pt_g = goal_pl.getPt()
-            #pt_c = current_pl.getPt()
+            # pt_c = current_pl.getPt()
             pt_c = current_place_pos
 
-            if math.sqrt( (pt_g[0]-pt_c[0])**2 + (pt_g[1]-pt_c[1])**2 ) < 2.0:
+            if math.sqrt((pt_g[0]-pt_c[0])**2 + (pt_g[1]-pt_c[1])**2) < 2.0:
                 self.conversation_interface.startListening()
                 return 'ok'
             else:
                 return 'far_away'
         else:
-            raise Exception( 'Call to place of type "{}" is not supported.'.format(goal_pl.getType()) )
+            raise Exception(
+                'Call to place of type "{}" is not supported.'.format(goal_pl.getType()))
 
         if self.preempt_requested():
             return 'preemption'
@@ -74,6 +78,7 @@ class CheckGoalProximity(smach_rcprg.State):
 
         return 'ok'
 
+
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface):
         self.conversation_interface = conversation_interface
@@ -81,8 +86,9 @@ class Cleanup(smach_rcprg.State):
         smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'])
 
     def execute(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        print 'Cleanup.execute'
+        rclpy.loginfo('{}: Executing state: {}'.format(
+            rclpy.get_name(), self.__class__.__name__))
+        print('Cleanup.execute')
         self.conversation_interface.stop()
         return 'ok'
 
@@ -90,16 +96,18 @@ class Cleanup(smach_rcprg.State):
 # The SM that govenrs the highest-level behaviour.
 #
 
+
 class MainSM(smach_rcprg.StateMachine):
     def __init__(self):
-        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'])
+        smach_rcprg.StateMachine.__init__(
+            self, outcomes=['Finished', 'shutdown'])
 
         t1 = time.time()
-        places_xml_filename = rospy.get_param('/kb_places_xml')
-        sim_mode = str(rospy.get_param('/sim_mode'))
+        places_xml_filename = rclpy.get_param('/kb_places_xml')
+        sim_mode = str(rclpy.get_param('/sim_mode'))
         assert sim_mode in ['sim', 'gazebo', 'real']
 
-        print 'Reading KB for places from file "' + places_xml_filename + '"'
+        print('Reading KB for places from file "' + places_xml_filename + '"')
         kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
         if len(sys.argv) < 3:
@@ -111,66 +119,74 @@ class MainSM(smach_rcprg.StateMachine):
                 place_name = sys.argv[idx+1]
 
         if place_name is None:
-            raise Exception('Argument "place_name" is missing in argv: ' + str(sys.argv))        
+            raise Exception(
+                'Argument "place_name" is missing in argv: ' + str(sys.argv))
 
         if isinstance(place_name, str):
             place_name = place_name.decode('utf-8')
 
         t2 = time.time()
-        print 'reading KB for places took', (t2-t1)
+        print('reading KB for places took', (t2-t1))
 
         dictionary = DisctionaryServiceClient()
         place_name_m = dictionary.getCases(place_name).getCase('mianownik')
 
         # Tests:
-        #print dictionary.getCases(u'łazienkę').getCase('mianownik')
-        #print dictionary.getCases(u'szczoteczką').getCase('mianownik')
+        # print dictionary.getCases(u'łazienkę').getCase('mianownik')
+        # print dictionary.getCases(u'szczoteczką').getCase('mianownik')
 
         t3 = time.time()
-        print 'reading Dictionary took', (t3-t2)
+        print('reading Dictionary took', (t3-t2))
 
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
-                ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
-            ],sim_mode)
+            ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
+        ], sim_mode)
         self.conversation_interface.start()
 
-        self.userdata.goal = PoseDescription({'place_name':place_name_m})
+        self.userdata.goal = PoseDescription({'place_name': place_name_m})
 
         with self:
             smach_rcprg.StateMachine.add('RememberCurrentPose', rcprg_smach.navigation.RememberCurrentPose(sim_mode),
-                                    transitions={'ok':'CheckGoalProximity', 'preemption':'Cleanup', 'error': 'Cleanup',
-                                    'shutdown':'shutdown'},
-                                    remapping={'current_pose':'current_pose'})
+                                         transitions={'ok': 'CheckGoalProximity', 'preemption': 'Cleanup', 'error': 'Cleanup',
+                                                      'shutdown': 'shutdown'},
+                                         remapping={'current_pose': 'current_pose'})
 
             smach_rcprg.StateMachine.add('CheckGoalProximity',
-                                    CheckGoalProximity(sim_mode, self.conversation_interface, kb_places),
-                                    transitions={'ok':'Cleanup', 'far_away':'MoveTo', 'preemption':'Cleanup',
-                                    'shutdown':'shutdown'},
-                                    remapping={'goal':'goal', 'current_pose':'current_pose'})
+                                         CheckGoalProximity(
+                                             sim_mode, self.conversation_interface, kb_places),
+                                         transitions={'ok': 'Cleanup', 'far_away': 'MoveTo', 'preemption': 'Cleanup',
+                                                      'shutdown': 'shutdown'},
+                                         remapping={'goal': 'goal', 'current_pose': 'current_pose'})
 
             smach_rcprg.StateMachine.add('MoveTo',
-                                    rcprg_smach.tiago_torso_controller.MoveToComplexTorsoMid(sim_mode, self.conversation_interface, kb_places),
-                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup',
-                                    'shutdown':'shutdown'},
-                                    remapping={'goal':'goal'})
+                                         rcprg_smach.tiago_torso_controller.MoveToComplexTorsoMid(
+                                             sim_mode, self.conversation_interface, kb_places),
+                                         transitions={'FINISHED': 'Cleanup', 'PREEMPTED': 'Cleanup', 'FAILED': 'Cleanup',
+                                                      'shutdown': 'shutdown'},
+                                         remapping={'goal': 'goal'})
 
             smach_rcprg.StateMachine.add('Cleanup',
-                                    Cleanup(self.conversation_interface),
-                                    transitions={'ok':'Finished', 'shutdown':'shutdown'},
-                                    remapping={ })
+                                         Cleanup(self.conversation_interface),
+                                         transitions={
+                                             'ok': 'Finished', 'shutdown': 'shutdown'},
+                                         remapping={})
 
         t4 = time.time()
-        print 'starting SMACH took', (t4-t3)
+        print('starting SMACH took', (t4-t3))
 
     def shutdownRequest(self):
         self.conversation_interface.stop()
         self.request_preempt()
 
-def main():
-    da = DynAgent( 'call' )
-    da.run( MainSM() )
 
-    return 0
+def main(args=None):
+    rclpy.init(args=args)
+
+    da = DynAgent('call')
+    da.run(MainSM())
+
+    rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

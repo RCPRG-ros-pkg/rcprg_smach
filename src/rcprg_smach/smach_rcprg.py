@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import smach
 
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import smach
 import rospy

@@ -1,13 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf8
 
 import math
 import random
-import rospy
+import rclpy
 import smach
 import smach_ros
 import dynamic_reconfigure.client
-import actionlib
+import rclpy_action
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
@@ -24,6 +24,7 @@ import task_manager
 
 ACK_WAIT_MAX_TIME_S = 30
 
+
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
     result = Pose()
@@ -35,53 +36,58 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     return result
 
+
 class SetHumanAndDestination(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         TaskER.BlockingState.__init__(self, input_keys=['human_name'], output_keys=['human_pose', 'dest_pose'],
-                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+                                      outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
         self.description = u'Znajduję człowieka'
 
     def transition_function(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        # self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek' )
+        self.get_logger().info('{}: Executing state: {}'.format(
+            self.get_name(), self.__class__.__name__))
         if isinstance(userdata.human_name, str):
-            human_name = userdata.human_name.decode('utf-8')
-        human_name = userdata.human_name.encode('utf-8').decode('utf-8')
-        userdata.human_pose = navigation.PoseDescription({'place_name':unicode(human_name)})
+            human_name = userdata.human_name
+        else:
+            human_name = userdata.human_name
+        userdata.human_pose = navigation.PoseDescription(
+            {'place_name': human_name})
 
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
 
+
 class CheckHumanState(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         TaskER.BlockingState.__init__(self, input_keys=['human_name'], output_keys=[],
-                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+                                      outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
         self.description = u'Sprawdzam stan człowieka'
 
     def transition_function(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.get_logger().info('{}: Executing state: {}'.format(
+            self.get_name(), self.__class__.__name__))
         gender = ""
         if isinstance(userdata.human_name, str):
-            human_name = userdata.human_name.decode('utf-8')
-        human_name = userdata.human_name.encode('utf-8').decode('utf-8')
+            human_name = userdata.human_name
+        else:
+            human_name = userdata.human_name
         if human_name in ["John", "Peter"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
 
-
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe '+human_name+u', jak się czujesz?' )
-        rospy.sleep(3)
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację.' )
+        self.conversation_interface.speakNowBlocking(
+            u'niekorzystne warunki pogodowe '+human_name+u', jak się czujesz?')
+        rclpy.sleep(3)
+        self.conversation_interface.speakNowBlocking(
+            u'niekorzystne warunki pogodowe Dziękuję za informację.')
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
@@ -90,25 +96,25 @@ class CheckHumanState(TaskER.BlockingState):
 class SayIFinished(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         TaskER.BlockingState.__init__(self,
-                             outcomes=['ok', 'shutdown'])
+                                      outcomes=['ok', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
         self.description = u'Mówię, że zakończyłem'
 
     def transition_function(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-      #  self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe zakończyłem zadanie' )
+        self.get_logger().info('{}: Executing state: {}'.format(
+            self.get_name(), self.__class__.__name__))
 
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
 
+
 class HumanFell(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.StateMachine.__init__(self, input_keys=['human_name','susp_data'], output_keys=['susp_data'],
-                                        outcomes=['PREEMPTED',
+        smach_rcprg.StateMachine.__init__(self, input_keys=['human_name', 'susp_data'], output_keys=['susp_data'],
+                                          outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED', 'shutdown'])
         self.userdata.max_lin_vel = 0.2
@@ -122,24 +128,24 @@ class HumanFell(smach_rcprg.StateMachine):
         with self:
 
             smach_rcprg.StateMachine.add('SetHumanAndDestination', SetHumanAndDestination(sim_mode, conversation_interface),
-                                    transitions={'ok':'SetNavParams', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={})
+                                         transitions={'ok': 'SetNavParams', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+                                                      'shutdown': 'shutdown'},
+                                         remapping={})
 
             smach_rcprg.StateMachine.add('SetNavParams', navigation.SetNavParams(sim_mode),
-                                    transitions={'ok':'MoveToHuman', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
+                                         transitions={'ok': 'MoveToHuman', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+                                                      'shutdown': 'shutdown'},
+                                         remapping={'max_lin_vel_in': 'max_lin_vel', 'max_lin_accel_in': 'max_lin_accel'})
 
             smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToHumanComplex(sim_mode, conversation_interface, kb_places),
-                                    transitions={'FINISHED':'CheckHumanState', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={'goal':'human_pose', 'susp_data':'susp_data'})
+                                         transitions={'FINISHED': 'CheckHumanState', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
+                                                      'shutdown': 'shutdown'},
+                                         remapping={'goal': 'human_pose', 'susp_data': 'susp_data'})
 
             smach_rcprg.StateMachine.add('CheckHumanState', CheckHumanState(sim_mode, conversation_interface),
-                                    transitions={'ok':'SayIFinished', 'preemption':'PREEMPTED', 'error':'FAILED'
-                                    ,'shutdown':'shutdown', },
-                                    remapping={'human_name':'human_name'})
+                                         transitions={
+                                             'ok': 'SayIFinished', 'preemption': 'PREEMPTED', 'error': 'FAILED', 'shutdown': 'shutdown', },
+                                         remapping={'human_name': 'human_name'})
 
             smach_rcprg.StateMachine.add('SayIFinished', SayIFinished(sim_mode, conversation_interface),
-                                    transitions={'ok':'FINISHED', 'shutdown':'shutdown'})
+                                         transitions={'ok': 'FINISHED', 'shutdown': 'shutdown'})

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf8
 
 # Copyright (c) 2019, Robot Control and Pattern Recognition Group,
@@ -6,7 +6,7 @@
 # Warsaw University of Technology
 #
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #     * Redistributions of source code must retain the above copyright
@@ -17,7 +17,7 @@
 #     * Neither the name of the Warsaw University of Technology nor the
 #       names of its contributors may be used to endorse or promote products
 #       derived from this software without specific prior written permission.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 # ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 # WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -32,27 +32,28 @@
 # Author: Dawid Seredynski
 #
 
-import rospy
+import rclpy
+from rclpy.node import Node
 from tiago_msgs.msg import Command
 import pl_nouns.odmiana as ro
+
 
 class PoseDescription:
     def __init__(self, parameters):
         self.parameters = parameters
 
+
 class TaskMoveTo:
     def __init__(self, pose, place_name):
         parameters = {}
-        if not pose is None:
+        if pose is not None:
             parameters['pose'] = pose
 
-        if not place_name is None:
+        if place_name is not None:
             if isinstance(place_name, str):
-                parameters['place_name'] = place_name.decode('utf-8')
-            elif isinstance(place_name, unicode):
                 parameters['place_name'] = place_name
             else:
-                raise Exception('Wrong type of "place_name": neither str nor unicode')
+                raise Exception('Wrong type of "place_name": not a str')
 
         self.__goal__ = PoseDescription(parameters)
 
@@ -62,18 +63,20 @@ class TaskMoveTo:
     def getGoal(self):
         return self.__goal__
 
+
 class TaskBringGoods:
     def __init__(self, goods_name):
         if isinstance(goods_name, str):
-            self.__goal__ = goods_name.decode('utf-8')
-        elif isinstance(goods_name, unicode):
             self.__goal__ = goods_name
+        else:
+            raise Exception('Wrong type of "goods_name": not a str')
 
     def getName(self):
         return 'bring_goods'
 
     def getGoal(self):
         return self.__goal__
+
 
 class TaskUniversal:
     def __init__(self, task_name):
@@ -85,17 +88,19 @@ class TaskUniversal:
     def getGoal(self):
         return None
 
-class TaskManager:
+
+class TaskManager(Node):
     def __init__(self, callback_list):
-        raise Exception('Do not use this class')
+        super().__init__('task_manager')
         self.__callback_list__ = callback_list
         self.o = ro.OdmianaRzeczownikow()
-        rospy.Subscriber("rico_cmd", Command, self.callback)
+        self.subscription = self.create_subscription(
+            Command, "rico_cmd", self.callback, 10)
 
     def przypadki(self, word):
         blocks = self.o.getBlocks(word)
         if len(blocks) == 0:
-            print u'Nie moge znaleźć nazwy miejsca w słowniku'
+            print('Nie moge znaleźć nazwy miejsca w słownik')
             word_m = word
         else:
             m_lp = self.o.getMianownikLp(blocks)
@@ -124,71 +129,74 @@ class TaskManager:
         pl_name = place_name.strip().lower()
 
         if pl_name == '':
-            print u'Mam gdzieś iść, ale nie podano miejsca'
+            print('Mam gdzieś iść, ale nie podano miejsca')
             return False
 
         place_name_m, place_name_d, place_name_b = self.przypadki(pl_name)
 
-        print u'Poproszono mnie o przejście do ' + place_name_d.decode('utf-8') + u' (' + place_name_m.decode('utf-8') + u')'
+        print('Poproszono mnie o przejście do ' + place_name_d.decode('utf-8') +
+              ' (' + place_name_m.decode('utf-8') + ')')
 
-        task = TaskMoveTo( None, place_name_m )
+        task = TaskMoveTo(None, place_name_m)
         return task
 
     def taskWander(self):
-        print u'Poproszono mnie, abym zaczął patrolowac'
+        print('Poproszono mnie, abym zaczął patrolowac')
         return TaskUniversal('wander')
 
     def taskBring(self, object_name):
-        print object_name
+        print(object_name)
         ob_name = object_name.strip().lower()
         ob_name_m, ob_name_d, ob_name_b = self.przypadki(ob_name)
-        print u'Poproszono mnie o przyniesienie ' + ob_name_d.decode('utf-8') + u' (' + ob_name_m.decode('utf-8') + u')'
+        print('Poproszono mnie o przyniesienie ' +
+              ob_name_d.decode('utf-8') + ' (' + ob_name_m.decode('utf-8') + ')')
 
         task = TaskBringGoods(object_name)
         return task
 
     def taskStop(self):
-        print u'Poproszono mnie o zatrzymanie się.'
+        print('Poproszono mnie o zatrzymanie się.')
         return TaskUniversal('stop')
 
     def questionLoad(self):
-        print u'Zapytano mnie: co wiozę?'
+        print('Zapytano mnie: co wiozę?')
         return TaskUniversal('q_load')
 
     def questionCurrentTask(self):
-        print u'Zapytano mnie: co robię?'
+        print('Zapytano mnie: co robię?')
         return TaskUniversal('q_current_task')
 
     def respAck(self):
-        print u'Usłyszałem ogólne potwierdzenie'
+        print('Usłyszałem ogólne potwierdzenie')
         return TaskUniversal('ack')
 
     def respAckIgave(self):
-        print u'Usłyszałem potwierdzenie podania'
+        print('Usłyszałem potwierdzenie podania')
         return TaskUniversal('ack_i_gave')
 
     def respAckItook(self):
-        print u'Usłyszałem potwierdzenie odebrania'
+        print('Usłyszałem potwierdzenie odebrania')
         return TaskUniversal('ack_i_took')
 
     def callback(self, data):
         param_dict = {}
         for param_name, param_value in zip(data.param_names, data.param_values):
             param_dict[param_name] = param_value
-            print 'param_name, param_value', param_name, param_value
+            print('param_name, param_value', param_name, param_value)
 
         task = None
         if data.intent_name == 'projects/incare-dialog-agent/agent/intents/176ab2ca-6250-4227-985b-cc82d5497d9f':
             task = self.taskBring(param_dict['przedmiot'])
 
         elif data.intent_name == 'projects/incare-dialog-agent/agent/intents/0165eceb-9621-4a7d-aecc-7a879951da18':
-            task = self.taskMoveTo( param_dict['miejsce'] )
+            task = self.taskMoveTo(param_dict['miejsce'])
 
         elif data.intent_name == 'projects/incare-dialog-agent/agent/intents/7acd4325-4cdd-4e15-99be-ad545f4dddd5':
             task = self.taskStop()
 
         elif data.intent_name == 'projects/incare-dialog-agent/agent/intents/2f028022-05b6-467d-bcbe-e861ab449c17':
-            print u'Niezrozumiałe polecenie: "' + data.query_text.decode('utf-8') + '"'
+            print('Niezrozumiałe polecenie: "' +
+                  data.query_text.decode('utf-8') + '"')
 
         elif data.intent_name == 'projects/incare-dialog-agent/agent/intents/d9e96166-030b-442f-a513-d3fa2e044030':
             task = self.taskWander()
@@ -216,8 +224,9 @@ class TaskManager:
             task = self.respAckItook()
 
         else:
-            raise Exception('Unknown intent: "' + data.intent_name + '", query_text: "' + data.query_text + '"')
+            raise Exception('Unknown intent: "' + data.intent_name +
+                            '", query_text: "' + data.query_text + '"')
 
         if not task is None:
             for cb in self.__callback_list__:
-                cb( task )
+                cb(task)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf8
 
 import rospy
@@ -1143,68 +1143,3 @@ class MoveToHumanComplex(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal','goal':'move_goal'})
-
-
-#    def transition_function(self, userdata):
-#        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
-#            self.description = u'Gdzieś jadę'
-#        else:
-#            place_name = userdata.goal.parameters['place_name']
-#            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
-#        return super(MoveToComplex, self).transition_function(userdata)
-
-# class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
-#     def __init__(self, sim_mode, conversation_interface, kb_places):
-#         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
-#                                             input_keys=['goal'])
-
-#         self.userdata.default_height = 0.2
-
-#         self.description = u'Jadę do określonego miejsca'
-
-#         with self:
-#             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
-#                                     transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
-#                                     'shutdown':'shutdown'},
-#                                     remapping={'current_pose':'current_pose'})
-
-#             smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
-#                                     transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
-#                                     'shutdown':'shutdown'},
-#                                     remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
-
-#             smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
-#                                     transitions={'ok':'SetHeightMid', 'preemption':'PREEMPTED', 'error': 'FAILED',
-#                                     'shutdown':'shutdown'},
-#                                     remapping={'move_goal':'move_goal'})
-
-#             smach_rcprg.StateMachine.add('SetHeightMid', SetHeight(sim_mode, conversation_interface),
-#                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
-#                                     'shutdown':'shutdown'},
-#                                     remapping={'torso_height':'default_height'})
-
-#             smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
-#                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
-#                                     'shutdown':'shutdown'},
-#                                     remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
-
-#             smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
-#                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
-#                                     'shutdown':'shutdown'})
-
-#             smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
-#                                     transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
-#                                     'shutdown':'shutdown'},
-#                                     remapping={'move_goal':'move_goal'})
-
-#             smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
-#                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
-#                                     remapping={'move_goal':'move_goal'})
-
-#    def transition_function(self, userdata):
-#        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
-#            self.description = u'Gdzieś jadę'
-#        else:
-#            place_name = userdata.goal.parameters['place_name']
-#            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
-#        return super(MoveToComplexTorsoMid, self).transition_function(userdata)

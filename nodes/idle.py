@@ -1,10 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf8
 
 import sys
 import time
 
-import rospy
+import rclpy
+from rclpy.node import Node
+
 import smach
 import smach_ros
 
@@ -20,15 +22,14 @@ from rcprg_smach.task_manager import PoseDescription
 class MainState(smach_rcprg.State):
     def __init__(self, conversation_interface):
         self.conversation_interface = conversation_interface
-
         smach_rcprg.State.__init__(self, outcomes=['shutdown', 'preemption'])
 
     def execute(self, userdata):
-        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        print 'MainState.execute'
+        rclpy.logging.get_logger(self.__class__.__name__).info(f'Executing state: {self.__class__.__name__}')
+        print('MainState.execute')
 
-        answer1_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Nic nie robię' )
-        answer2_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'niekorzystne warunki pogodowe nic nie wiozę' )
+        answer1_id = self.conversation_interface.setAutomaticAnswer('q_current_task', u'Nic nie robię')
+        answer2_id = self.conversation_interface.setAutomaticAnswer('q_load', u'niekorzystne warunki pogodowe nic nie wiozę')
 
         while True:
             if self.preempt_requested():
@@ -45,27 +46,21 @@ class MainState(smach_rcprg.State):
                 self.service_preempt()
                 return 'shutdown'
 
-            rospy.sleep(0.1)
+            time.sleep(0.1)
         raise Exception('Unreachable code')
-
-#
-# The SM that govenrs the highest-level behaviour.
-#
 
 class MainSM(smach_rcprg.StateMachine):
     def __init__(self):
-        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'])
-
-        places_xml_filename = rospy.get_param('/kb_places_xml')
-        sim_mode = str(rospy.get_param('/sim_mode'))
+        super().__init__(outcomes=['Finished', 'shutdown'])
+        
+        node = rclpy.create_node('MainSM_node')
+        places_xml_filename = node.get_parameter('/kb_places_xml').value
+        sim_mode = str(node.get_parameter('/sim_mode').value)
         assert sim_mode in ['sim', 'gazebo', 'real']
 
         self.conversation_interface = rcprg_smach.conversation.ConversationMachine([
                 ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
                 ('q_load',        'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507')
-                #('ack',           'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
-                #('ack_i_took',    'projects/incare-dialog-agent/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b'),
-                #('ack_i_gave',    'projects/incare-dialog-agent/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629'),
             ],sim_mode)
         self.conversation_interface.start()
 
@@ -79,9 +74,11 @@ class MainSM(smach_rcprg.StateMachine):
         self.conversation_interface.stop()
         self.request_preempt()
 
-def main():
-    da = DynAgent( 'idle' )
-    da.run( MainSM() )
+def main(args=None):
+    rclpy.init(args=args)
+    da = DynAgent('idle')
+    da.run(MainSM())
+    rclpy.shutdown()
 
     return 0
 
