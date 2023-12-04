@@ -205,8 +205,12 @@ class SimpleConversationMachine:
     def __getAutomaticAnswerText__(self, answer_id):
         print 'CONVERSATION __getAutomaticAnswerText__', answer_id
 
+        # if answer_id == -1:
+        #     return 'niekorzystne warunki pogodowe I don\'t understand'
+
         if answer_id == -1:
-            return 'niekorzystne warunki pogodowe I don\'t understand'
+            return 'I don\'t understand'
+
         intent, text = self.__automatic_answers_id_map__[answer_id]
         return text
 

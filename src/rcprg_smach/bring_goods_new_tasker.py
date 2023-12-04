@@ -63,7 +63,8 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
 
         sentence = initiate_conv_based_on_ctx()
 
-        self.conversation_interface.speakNowBlocking(u'niekorzystne warunki pogodowe ' + sentence.sentence)
+        # self.conversation_interface.speakNowBlocking(u'niekorzystne warunki pogodowe ' + sentence.sentence)
+        self.conversation_interface.speakNowBlocking(sentence.sentence)
 
         print 'asked.'
 
@@ -74,8 +75,11 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         self.conversation_interface.addExpected('turn around')
         self.conversation_interface.addExpected('unexpected_question')
 
+        # answer_id = self.conversation_interface.setAutomaticAnswer(
+        #     'what are you doing', u'niekorzystne warunki pogodowe czekam na położenie przedmiotu')
+
         answer_id = self.conversation_interface.setAutomaticAnswer(
-            'what are you doing', u'niekorzystne warunki pogodowe czekam na położenie przedmiotu')
+            'what are you doing', u'I\'m waiting for the item to be placed')
 
         userdata.q_load_answer_id = None
 
@@ -113,9 +117,12 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
                 self.conversation_interface.removeExpected('turn around')
                 self.conversation_interface.removeExpected('unexpected_question')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
+                # self.conversation_interface.speakNowBlocking(
+                #     u'niekorzystne warunki pogodowe thank you. now I need to transport goods to person who requested it. I need to go to place from which I started')
+                # answer_id = self.conversation_interface.setAutomaticAnswer('what are you carrying', u'niekorzystne warunki pogodowe wiozę przedmiot')
                 self.conversation_interface.speakNowBlocking(
-                    u'niekorzystne warunki pogodowe thank you. now I need to transport goods to person who requested it. I need to go to place from which I started')
-                answer_id = self.conversation_interface.setAutomaticAnswer('what are you carrying', u'niekorzystne warunki pogodowe wiozę przedmiot')
+                    u'thank you. now I need to transport goods to person who requested it. I need to go to place from which I started')
+                answer_id = self.conversation_interface.setAutomaticAnswer('what are you carrying', u'I\'m carrying an item')
                 userdata.q_load_answer_id = answer_id
                 return 'ok'
 
@@ -146,11 +153,15 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
                 self.conversation_interface.removeExpected('turn around')
 
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
+                # answer_id = self.conversation_interface.setAutomaticAnswer(
+                #     'what are you doing', u'niekorzystne warunki pogodowe I\'m going to request additional information from user regarding this')
                 answer_id = self.conversation_interface.setAutomaticAnswer(
-                    'what are you doing', u'niekorzystne warunki pogodowe I\'m going to request additional information from user regarding this')
+                    'what are you doing', u'I\'m going to request additional information from user regarding this')
 
+                # self.conversation_interface.speakNowBlocking(
+                #     u'niekorzystne warunki pogodowe I\'m going to request additional information from user regarding this')
                 self.conversation_interface.speakNowBlocking(
-                    u'niekorzystne warunki pogodowe I\'m going to request additional information from user regarding this')
+                    u'I\'m going to request additional information from user regarding this')
 
                 userdata.q_load_answer_id = None
 
@@ -202,8 +213,10 @@ class TellInfoFromKeeper(TaskER.BlockingState):
 
         sentence = initiate_conv_based_on_ctx()
 
-        self.conversation_interface.speakNowBlocking(
-            u'niekorzystne warunki pogodowe ' + sentence.sentence)
+        # self.conversation_interface.speakNowBlocking(
+        #     u'niekorzystne warunki pogodowe ' + sentence.sentence)
+
+        self.conversation_interface.speakNowBlocking(sentence.sentence)
 
         print 'told info from keeper'
 
@@ -225,8 +238,11 @@ class TellInfoFromKeeper(TaskER.BlockingState):
         self.conversation_interface.addExpected('turn around')
         # self.conversation_interface.addExpected('follow_up_answer')
 
+        # answer_id = self.conversation_interface.setAutomaticAnswer(
+        #     'what are you doing', u'niekorzystne warunki pogodowe czekam na odebranie przedmiotu')
+
         answer_id = self.conversation_interface.setAutomaticAnswer(
-            'what are you doing', u'niekorzystne warunki pogodowe czekam na odebranie przedmiotu')
+            'what are you doing', u'I\'m waiting for the item to be taken')
 
         start_time = rospy.Time.now()
         while True:
@@ -341,8 +357,11 @@ class SayIFinished(TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(
             rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        # self.conversation_interface.speakNowBlocking(
+        #     u'niekorzystne warunki pogodowe I finished performing the task')
+
         self.conversation_interface.speakNowBlocking(
-            u'niekorzystne warunki pogodowe I finished performing the task')
+            u'I finished performing the task')
 
         # pub_context.publish(HistoryEvent('Rico', 'finish performing', '"bring goods" task', ''))
         # pub_context.publish(HistoryEvent('system', 'finish scenario', userdata.scenario_id, ''))
@@ -431,12 +450,12 @@ class BringGoods(smach_rcprg.StateMachine):
                                                       'timeout': 'SayAskKeeperForGoods', 'shutdown': 'shutdown', 'unexpected_question': 'MoveBackAfterUnexpectedQuestion'},
                                          remapping={'q_load_answer_id': 'q_load_answer_id'})
 
-            smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplexBlocking(sim_mode, conversation_interface, kb_places),
                                          transitions={'FINISHED': 'TellInfoFromKeeper', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
                                                       'shutdown': 'shutdown'},
                                          remapping={'goal': 'initial_pose'})
             
-            smach_rcprg.StateMachine.add('MoveBackAfterUnexpectedQuestion', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            smach_rcprg.StateMachine.add('MoveBackAfterUnexpectedQuestion', navigation.MoveToComplexBlocking(sim_mode, conversation_interface, kb_places),
                                             transitions={'FINISHED': 'KillTask', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
                                                         'shutdown': 'shutdown'},
                                             remapping={'goal': 'initial_pose'})
