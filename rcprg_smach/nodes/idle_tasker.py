@@ -29,13 +29,16 @@ my_name = None
 global USE_SMACH_INRTOSPECTION_SERVER
 USE_SMACH_INRTOSPECTION_SERVER = False
 
+
 class MainState(TaskER.SuspendableState):
     def __init__(self):
-        TaskER.SuspendableState.__init__(self, outcomes=['shutdown', 'PREEMPTED'])
+        TaskER.SuspendableState.__init__(
+            self, outcomes=['shutdown', 'PREEMPTED'])
 
     def transition_function(self, userdata):
         node = rclpy.create_node(self.__class__.__name__)
-        node.get_logger().info('{}: Executing state: {}'.format(node.get_name(), self.__class__.__name__))
+        node.get_logger().info('{}: Executing state: {}'.format(
+            node.get_name(), self.__class__.__name__))
         print('MainState.execute')
 
         # answer1_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Nic nie robię' )
@@ -53,6 +56,7 @@ class MainState(TaskER.SuspendableState):
             rclpy.spin_once(node, timeout_sec=0.2)
         raise Exception('Unreachable code')
 
+
 def ptf_csp(ptf_id):
     global my_name
     node = rclpy.create_node('ptf_csp_node')
@@ -63,7 +67,7 @@ def ptf_csp(ptf_id):
     if self_terminate_flag == True:
         flag = 'self-terminate'
     if ptf_id[0] == "scheduleParams":
-        return [flag, ScheduleParams(cost = cost, completion_time=1000,cost_per_sec=0,final_resource_state=RobotResource())]
+        return [flag, ScheduleParams(cost=cost, completion_time=1000, cost_per_sec=0, final_resource_state=RobotResource())]
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
         req = ptf_id[1]
@@ -72,6 +76,7 @@ def ptf_csp(ptf_id):
         req = CostConditionsRequest()
         req = ptf_id[1]
         return [flag, CostConditionsResponse(cost_per_sec=0, cost_to_complete=0)]
+
 
 class MyTaskER(TaskER):
     def __init__(self, da_state_name, da_name):
@@ -84,11 +89,12 @@ class MyTaskER(TaskER):
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
-        TaskER.__init__(self,da_state_name)
+        TaskER.__init__(self, da_state_name)
         if USE_SMACH_INRTOSPECTION_SERVER:
-            self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
+            self.sis = smach_ros.IntrospectionServer(
+                unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
             self.sis.start()
-    	self.my_fsm = MainState()
+        self.my_fsm = MainState()
 
     def shutdownRequest(self):
         global USE_SMACH_INRTOSPECTION_SERVER
@@ -101,17 +107,20 @@ class MyTaskER(TaskER):
             self.sis.clear()
         self.request_preempt()
 
-  def cleanup_tf(self):
-    rclpy.logging.get_logger(self.__class__.__name__).info(f'Executing state: {self.__class__.__name__}')
-    print('Cleanup.execute')
-    # self.conversation_interface.stop()
-    return 'ok'
+    def cleanup_tf(self):
+        rclpy.logging.get_logger(self.__class__.__name__).info(
+            f'Executing state: {self.__class__.__name__}')
+        print('Cleanup.execute')
+        # self.conversation_interface.stop()
+        return 'ok'
+
 
 def get_suspension_tf(self, susp_data):
     print("My TASKER -- get_suspension_tf")
     print("My TASKER")
     print("My TASKER")
-    rclpy.logging.get_logger(self.__class__.__name__).info(f'Executing state: {self.__class__.__name__}')
+    rclpy.logging.get_logger(self.__class__.__name__).info(
+        f'Executing state: {self.__class__.__name__}')
     print('GetSuspend.execute')
     print(f"susp data: {susp_data.getData()}")
     print(f"susp data[0]: {susp_data.getData()[0]}")
@@ -127,26 +136,31 @@ def get_suspension_tf(self, susp_data):
     if fsm_executable is None:
         print("harmoniser did not specify an executable for suspension behaviour, terminating task")
         fsm_executable = "terminate task"
-    
+
     return fsm_executable
+
 
 def exe_suspension_tf(self, fsm_es_in):
     print("My TASKER -- exe_suspension_tf")
     print("My TASKER")
     print("My TASKER")
-    rclpy.logging.get_logger(self.__class__.__name__).info(f'Executing state: {self.__class__.__name__}')
+    rclpy.logging.get_logger(self.__class__.__name__).info(
+        f'Executing state: {self.__class__.__name__}')
     print('ExecSuspension.execute')
     print(fsm_es_in)
     if fsm_es_in == "terminate task":
         pass
         # return 'shutdown'
     else:
-        p = subprocess.Popen(fsm_es_in, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = subprocess.Popen(fsm_es_in, shell=True,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         p.wait()
     return "FINISHED"
 
+
 def wait_tf(self):
     pass
+
 
 def update_task_tf(self):
     global USE_SMACH_INRTOSPECTION_SERVER
@@ -165,31 +179,40 @@ def update_task_tf(self):
         self.sis.start()
     pass
 
+
 def initialise_tf(self):
     print("My TASKER -- initialise")
     # self.conversation_interface.start()
 
+
 def main():
-    da_name = None
-    da_type = None
-    da_id = None
-    da_state_name = []
-    for idx in range(1, len(sys.argv), 2):
-                if sys.argv[idx] == 'da_name':
-                    da_name = sys.argv[idx+1]
-                if sys.argv[idx] == 'da_type':
-                    da_type = sys.argv[idx+1]
-                if sys.argv[idx] == 'da_id':
-                    da_id = sys.argv[idx+1]
-    if da_name == None or da_type == None or da_id == None:
-        print "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified"
-        return 1
-    da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name )
-    print "RUN BRING"
-    da.run( MyTaskER(da_state_name,da_name) )
-    print "BG ENDED"
+    # da_name = None
+    # da_type = None
+    # da_id = None
+    # da_state_name = []
+    # for idx in range(1, len(sys.argv), 2):
+    #     if sys.argv[idx] == 'da_name':
+    #         da_name = sys.argv[idx+1]
+    #     if sys.argv[idx] == 'da_type':
+    #         da_type = sys.argv[idx+1]
+    #     if sys.argv[idx] == 'da_id':
+    #         da_id = sys.argv[idx+1]
+    # if da_name == None or da_type == None or da_id == None:
+    #     print(
+    #         "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified")
+    #     return 1
+
+    da_name = "test_name"
+    da_type = "test_type"
+    da_id = "1"
+
+    da = DynAgent(da_name, da_id, da_type, ptf_csp, da_state_name)
+    print("RUN BRING")
+    da.run(MyTaskER(da_state_name, da_name))
+    print("BG ENDED")
     return 0
+
 
 if __name__ == '__main__':
     main()
-    print "ALLLLLLL CLOOOOOSSSSEEEEED"
+    print("ALLLLLLL CLOOOOOSSSSEEEEED")
