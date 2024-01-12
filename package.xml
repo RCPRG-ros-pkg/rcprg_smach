@@ -1,24 +1,18 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>rcprg_smach</name>
   <version>0.0.0</version>
   <description>The rcprg_smach package</description>
-
+  <license>TODO</license>
+  
   <maintainer email="5305@pw.edu.pl">Dawid Seredynski</maintainer>
 
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
 
-  <license>TODO</license>
-
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>actionlib</depend>
-  <depend>actionlib_msgs</depend>
-  <depend>diagnostic_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>roscpp</depend>
-  <depend>move_base_msgs</depend>
-  <depend>rospy</depend>
-  <depend>std_msgs</depend>
-  <depend>std_srvs</depend>
-  <depend>tf</depend>
- 
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>
