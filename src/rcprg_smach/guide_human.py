@@ -87,7 +87,7 @@ class IntroduceTask(TaskER.BlockingState):
         if isinstance(userdata.human_name, str):
             human_name = userdata.human_name.decode('utf-8')
         human_name = userdata.human_name.encode('utf-8').decode('utf-8')
-        if human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzysztof"]:
+        if human_name in ["John", "Peter","keeper","Gustaw","Maciej","Krzysztof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
@@ -125,7 +125,7 @@ class Goodbye(TaskER.BlockingState):
             userdata.human_name = userdata.human_name.decode('utf-8')
         userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
 
-        if userdata.human_name in ["John", "Peter","Tomek","Gustaw","Maciej","Krzysztof"]:
+        if userdata.human_name in ["John", "Peter","keeper","Gustaw","Maciej","Krzysztof"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
@@ -162,6 +162,7 @@ class SayAskForGoods(TaskER.BlockingState):
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
+        print 'THIS RUNS rcprg/rcprg_smach/src/rcprg_smach/guide_human.py'
         self.conversation_interface.addExpected('ack')
         self.conversation_interface.addExpected('ack_i_gave')
         self.conversation_interface.addExpected('turn_around')
