@@ -27,12 +27,13 @@ import imp
 my_name = None
 
 global USE_SMACH_INRTOSPECTION_SERVER
-USE_SMACH_INRTOSPECTION_SERVER = False
+USE_SMACH_INRTOSPECTION_SERVER = True
 
 class MainState(TaskER.SuspendableState):
     # def __init__(self, conversation_interface):
     def __init__(self):
         # self.conversation_interface = conversation_interface
+        # print("IDLE Init")
 
         TaskER.SuspendableState.__init__(self, outcomes=['shutdown', 'PREEMPTED'])
 
@@ -43,14 +44,16 @@ class MainState(TaskER.SuspendableState):
         # answer1_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Nic nie robię' )
         # answer2_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'niekorzystne warunki pogodowe nic nie wiozę' )
 
+        i = 0
         while True:
+            if i % 5 == 0:
+                print("No task in execution. IDLE running for "+str(int(i/5))+ " s.")
+            i += 1
             if self.is_suspension_flag() != None:
                 print""
                 print""
-                print""
                 print "IDLE GOT SUSP FLAG"
-                print""
-                print""
+                print(self.is_suspension_flag())
                 print""
                 print""
                 # self.conversation_interface.removeAutomaticAnswer(answer1_id)
@@ -60,7 +63,10 @@ class MainState(TaskER.SuspendableState):
                 return 'PREEMPTED'
 
             if self.__shutdown__:
-                print "IDLE GOT SHUTDOWN FLAG"
+                for i in range(5):
+                    print""
+                    print""
+                    print "IDLE GOT SHUTDOWN FLAG"
                 # self.conversation_interface.removeAutomaticAnswer(answer1_id)
                 # self.conversation_interface.removeAutomaticAnswer(answer2_id)
                 # self.conversation_interface.stop()
@@ -77,7 +83,7 @@ def ptf_csp(ptf_id):
     flag = None
     self_terminate_flag = rospy.get_param('/term_ID', 'false')
     cost = rospy.get_param("/cost_ID_"+my_name, 5)
-    print "self_terminate_flag: ", self_terminate_flag
+    # print "self_terminate_flag: ", self_terminate_flag
     if self_terminate_flag == True:
         flag = 'self-terminate'
     if ptf_id[0] == "scheduleParams":
@@ -201,9 +207,11 @@ class MyTaskER(TaskER):
             self.sis.clear()
 
         # imp.reload(rcprg_smach.bring_goods)
-        print "SWAPPING"
+
+        print("Before state swap")
         # self.swap_state('ExecFSM', MainState(self.conversation_interface))
         self.swap_state('ExecFSM', MainState())
+        print("After state swap")
 
         if USE_SMACH_INRTOSPECTION_SERVER:
             self.sis.start()
@@ -217,7 +225,9 @@ def main():
     da_name = None
     da_type = None
     da_id = None
+    task_kb_id = None
     da_state_name = []
+    
     for idx in range(1, len(sys.argv), 2):
                 if sys.argv[idx] == 'da_name':
                     da_name = sys.argv[idx+1]
@@ -225,15 +235,18 @@ def main():
                     da_type = sys.argv[idx+1]
                 if sys.argv[idx] == 'da_id':
                     da_id = sys.argv[idx+1]
+                if sys.argv[idx] == 'task_kb_id':
+                    task_kb_id = sys.argv[idx+1]
     if da_name == None or da_type == None or da_id == None:
-        print "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified"
+        print "DA: one of the parameters (<da_name>, <da_type>, <da_id>, or <task_kb_id>) is not specified"
         return 1
-    da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name )
-    print "RUN BRING"
+    da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name, task_kb_id )
+    # print "RUN BRING"
     da.run( MyTaskER(da_state_name,da_name) )
-    print "BG ENDED"
+    # print "BG ENDED"
     return 0
 
 if __name__ == '__main__':
     main()
-    print "ALLLLLLL CLOOOOOSSSSEEEEED"
+    # print "ALLLLLLL CLOOOOOSSSSEEEEED"
+    print "IDLE_TaskER task closed."

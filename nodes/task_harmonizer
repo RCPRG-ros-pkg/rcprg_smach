@@ -190,7 +190,9 @@ class TaskHarmonizer:
         while not rospy.is_shutdown():
             cost_file = open("./TH_cost", "a+")
             print "\n SCHEDULING \n"
+
             self.tha.schedule_new(cost_file)
+            # self.tha.schedule_my(cost_file)
             self.shdl_performed=True
             print "\n SCHEDULED \n"
             rospy.sleep(2)
@@ -202,6 +204,8 @@ class TaskHarmonizer:
 
     def switcher(self):
         while not rospy.is_shutdown():
+            for i in range(20):
+                print("SMACH TH SWITCH")
             self.tha.switchDA()
             if self._FINISH:
                 break
@@ -244,6 +248,8 @@ def main():
     switcher.join()
     scheduler.join()
 if __name__ == '__main__':
+    for i in range(20):
+        print("TO JEST TO")
     main()
 
 '''

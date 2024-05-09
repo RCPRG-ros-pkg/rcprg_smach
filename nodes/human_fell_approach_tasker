@@ -17,7 +17,8 @@ import rcprg_smach.smach_rcprg as smach_rcprg
 import rcprg_smach.gh_csp
 import rcprg_smach.update_pose
 
-import rcprg_kb.places_xml as kb_p
+# import rcprg_kb.places_xml as kb_p
+import tiago_kb.places_xml as kb_p
 
 from rcprg_smach.task_manager import PoseDescription
 
