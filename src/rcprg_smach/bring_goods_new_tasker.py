@@ -33,6 +33,9 @@ ACK_WAIT_MAX_TIME_S = 30
 
 pub_context = rospy.Publisher('/context/push', HistoryEvent, queue_size=10)
 
+def set_active_speaker(actor_name):
+    rospy.loginfo("Changed active speaker to '{}'.".format(actor_name))
+    rospy.set_param("human_tf", actor_name)
 
 class SayAskKeeperForGoods(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, input_keys):
@@ -49,11 +52,13 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(
             rospy.get_name(), self.__class__.__name__))
-        
+
         if not self.asked:
             pub_context.publish(HistoryEvent('Rico', 'come to', 'keeper', ''))
             pub_context.publish(HistoryEvent('Keeper', 'see', 'Rico', ''))
             pub_context.publish(HistoryEvent('Keeper', 'say', 'Hi Rico, what you need?', ''))
+
+        set_active_speaker("keeper")
 
         rospy.sleep(1.0)
 
@@ -144,7 +149,7 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
 
                     clone_scenario_with_new_intent(
                         int(userdata.scenario_id), new_intent_name, [new_param])
-                    
+
                     print 'cloned'
 
                 self.conversation_interface.removeExpected('unexpected_question')
@@ -206,6 +211,8 @@ class TellInfoFromKeeper(TaskER.BlockingState):
             pub_context.publish(HistoryEvent('Rico', 'came back to', 'senior', ''))
             pub_context.publish(HistoryEvent('Senior', 'see', 'Rico', ''))
             pub_context.publish(HistoryEvent('Senior', 'say', 'What\'s up with my request?', ''))
+
+        set_active_speaker("senior")
 
         rospy.sleep(1.0)
 
@@ -316,7 +323,7 @@ class TellInfoFromKeeper(TaskER.BlockingState):
             rospy.sleep(0.1)
 
         raise Exception('Unreachable code')
-    
+
 
 class KillTask(TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
@@ -385,7 +392,7 @@ class BringGoods(smach_rcprg.StateMachine):
         for idx in range(0, len(task_parameters), 2):
             param_name = task_parameters[idx]
             param_value = task_parameters[idx+1]
-            
+
             input_keys.append(param_name)
 
 
@@ -397,14 +404,14 @@ class BringGoods(smach_rcprg.StateMachine):
                                           outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED', 'shutdown'])
-        
+
 
         for idx in range(0, len(task_parameters), 2):
             param_name = task_parameters[idx]
             param_value = task_parameters[idx+1]
-            
+
             setattr(self.userdata, param_name, param_value)
-        
+
         print 'Item from userdata: ', self.userdata.item
 
         self.userdata.max_lin_vel = 0.2
@@ -454,7 +461,7 @@ class BringGoods(smach_rcprg.StateMachine):
                                          transitions={'FINISHED': 'TellInfoFromKeeper', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
                                                       'shutdown': 'shutdown'},
                                          remapping={'goal': 'initial_pose'})
-            
+
             smach_rcprg.StateMachine.add('MoveBackAfterUnexpectedQuestion', navigation.MoveToComplexBlocking(sim_mode, conversation_interface, kb_places),
                                             transitions={'FINISHED': 'KillTask', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
                                                         'shutdown': 'shutdown'},
