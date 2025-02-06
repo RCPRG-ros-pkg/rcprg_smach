@@ -659,7 +659,7 @@ class MoveTo(TaskER.SuspendableState):
 class MoveToHuman(MoveTo):
     def __init__(self, sim_mode, conversation_interface):
         self.last_human_pose_update = None
-        self.HUMAN_POSE_UPDATE_IN_APPROACH = 2
+        self.HUMAN_POSE_UPDATE_IN_APPROACH = 10
         MoveTo.__init__(self,sim_mode,conversation_interface)
 
 
