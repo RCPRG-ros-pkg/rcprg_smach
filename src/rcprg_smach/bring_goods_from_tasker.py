@@ -20,6 +20,7 @@ from task_database.srv import GetParamsForScenario, AddParamsForScenario, CloneS
 from language_processor.srv import InitiateConvBasedOnCtx
 from rico_context.srv import GetContext, ResetContext, ResetContextResponse, ResetContextRequest
 from rico_context.msg import HistoryEvent
+from openai_interface import OpenAIInterface
 
 import navigation
 from TaskER.TaskER import TaskER
@@ -45,6 +46,17 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
         self.get_params_for_scenario = rospy.ServiceProxy('get_params_for_scenario', GetParamsForScenario)
 
         self.asked = False
+
+        self.tactile_table_subscriber = rospy.Subscriber('/tactile_table/item', std_msgs.msg.String, self.tactile_table_callback)
+        self.tactile_table_item = ['' for _ in range(10)]
+        self.open_ai_interface = OpenAIInterface()
+
+    def tactile_table_callback(self, msg):
+        self.tactile_table_item.pop(0)
+        self.tactile_table_item.append(msg.data)
+
+    def get_gtp_request_message(self, item):
+        return '''You are an AI inside of a social robot. You have a software detection mechanism capable of determining what item is placed upon you. You can classify an object into one of the following classes: ['nothing', 'lead_box', 'light_lead_box', 'normal_box_empty', 'normal_box_full', 'unknown']. Your software indicates that the object placed upon you belongs to a class named %s. According to the user, you are supposed to be transporting %s. Do you think, that the transported object is classified properly. Answer yes or no only.''' % (self.tactile_table_item[-1], item)
 
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(
@@ -109,6 +121,28 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 self.service_preempt()
                 return 'preemption'
+
+            if all([item == self.tactile_table_item[0] for item in self.tactile_table_item[1:]]) and self.tactile_table_item[0] != 'nothing':
+                messages = [
+                    {"role": "system", "content": self.get_gtp_request_message(userdata.item) }
+                ]
+                response = self.open_ai_interface.request_gpt("gpt-3.5-turbo", messages)
+                print response
+
+                if 'yes' in response.lower():
+                    self.conversation_interface.removeExpected('confirm')
+                    self.conversation_interface.removeExpected('User gave')
+                    self.conversation_interface.removeExpected('turn around')
+                    self.conversation_interface.removeExpected('unexpected_question')
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    # self.conversation_interface.speakNowBlocking(
+                    #     u'niekorzystne warunki pogodowe thank you. now I need to transport goods to person who requested it. I need to go to place from which I started')
+                    # answer_id = self.conversation_interface.setAutomaticAnswer('what are you carrying', u'niekorzystne warunki pogodowe wiozę przedmiot')
+                    self.conversation_interface.speakNowBlocking(
+                        u'thank you. now I need to transport goods to person who requested it. I need to go to place from which I started')
+                    answer_id = self.conversation_interface.setAutomaticAnswer('what are you carrying', u'I\'m carrying an item')
+                    userdata.q_load_answer_id = answer_id
+                    return 'ok'
 
             if self.conversation_interface.consumeExpected('confirm') or\
                     self.conversation_interface.consumeExpected('User gave'):
@@ -188,6 +222,14 @@ class TellInfoFromKeeper(TaskER.BlockingState):
         self.conversation_interface = conversation_interface
         self.description = u'Proszę o odebranie rzeczy'
         self.told = False
+
+        self.tactile_table_subscriber = rospy.Subscriber('/tactile_table/item', std_msgs.msg.String, self.tactile_table_callback)
+        self.tactile_table_item = ['' for _ in range(10)]
+
+    def tactile_table_callback(self, msg):
+        self.tactile_table_item.pop(0)
+        self.tactile_table_item.append(msg.data)
+
 
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(
@@ -294,6 +336,18 @@ class TellInfoFromKeeper(TaskER.BlockingState):
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
                 return 'turn_around'
 
+            if all([item == 'nothing' for item in self.tactile_table_item]):
+                self.conversation_interface.removeExpected('confirm')
+                self.conversation_interface.removeExpected('User recieved')
+                self.conversation_interface.removeExpected('turn around')
+                # self.conversation_interface.removeExpected('follow_up_answer')
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
+                if not userdata.q_load_answer_id is None:
+                    self.conversation_interface.removeAutomaticAnswer(
+                        userdata.q_load_answer_id)
+                return 'ok'
+
+
             # if self.conversation_interface.consumeExpected('follow_up_answer'):
             #     [question_text] = unexpected_question.param_values
             #     print 'question text', question_text
@@ -373,7 +427,7 @@ class SayIFinished(TaskER.BlockingState):
         return 'ok'
 
 
-class BringGoods(smach_rcprg.StateMachine):
+class BringGoodsFrom(smach_rcprg.StateMachine):
 
     def __init__(self, sim_mode, conversation_interface, kb_places, task_parameters):
         rospy.wait_for_service('get_params_for_scenario')
@@ -389,7 +443,7 @@ class BringGoods(smach_rcprg.StateMachine):
             input_keys.append(param_name)
 
 
-        print 'Input keys passed to BringGoods: ', input_keys
+        print 'Input keys passed to BringGoodsFrom: ', input_keys
 
         input_keys.extend(['susp_data', 'goal']);
 
@@ -411,11 +465,13 @@ class BringGoods(smach_rcprg.StateMachine):
         self.userdata.max_lin_accel = 0.5
         # TODO: use knowledge base for this:
 
-        self.userdata.kitchen_pose = navigation.PoseDescription({'place_name': u'kuchnia'})
+        # self.userdata.kitchen_pose = navigation.PoseDescription({'place_name': u'kuchnia'})
+        self.userdata.place_pose = task_manager.PoseDescription({'place_name': unicode(self.userdata.place)})
+        print self.userdata.place_pose.parameters
         self.userdata.default_height = 0.2
         self.userdata.lowest_height = 0.0
 
-        self.userdata.object_name = 'keeper'
+        # self.userdata.object_name = 'keeper'
 
         self.description = u'Podaję rzecz'
 
@@ -426,29 +482,37 @@ class BringGoods(smach_rcprg.StateMachine):
                                          remapping={'current_pose': 'initial_pose'})
 
             smach_rcprg.StateMachine.add('SetHeightMid', navigation.SetHeight(sim_mode, conversation_interface),
-                                         transitions={'ok': 'SetKeeperPose', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+                                         # transitions={'ok': 'SetKeeperPose', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+                                         transitions={'ok': 'SetNavParams', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'shutdown': 'shutdown'},
                                          remapping={'torso_height': 'default_height'})
 
-            smach_rcprg.StateMachine.add('SetKeeperPose', navigation.SetObjectPose(sim_mode, conversation_interface, kb_places),
-                                         transitions={'ok': 'SetNavParams', 'preemption': 'PREEMPTED', 'error': 'FAILED',
-                                                      'shutdown': 'shutdown'},
-                                         remapping={})
+            # smach_rcprg.StateMachine.add('SetKeeperPose', navigation.SetObjectPose(sim_mode, conversation_interface, kb_places),
+            #                              transitions={'ok': 'SetNavParams', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+            #                                           'shutdown': 'shutdown'},
+            #                              remapping={})
 
             smach_rcprg.StateMachine.add('SetNavParams', navigation.SetNavParams(sim_mode),
-                                         transitions={'ok': 'MoveToHuman', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+                                         # transitions={'ok': 'MoveToHuman', 'preemption': 'PREEMPTED', 'error': 'FAILED',
+                                         transitions={'ok': 'MoveToPlace', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'shutdown': 'shutdown'},
                                          remapping={'max_lin_vel_in': 'max_lin_vel', 'max_lin_accel_in': 'max_lin_accel'})
 
-            smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToHumanComplex(sim_mode, conversation_interface, kb_places),
+            # smach_rcprg.StateMachine.add('MoveToHuman', navigation.MoveToHumanComplex(sim_mode, conversation_interface, kb_places),
+            #                              transitions={'FINISHED': 'SayAskKeeperForGoods', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
+            #                                           'shutdown': 'shutdown'},
+            #                              remapping={'goal': 'object_pose', 'susp_data': 'susp_data'})
+            
+            smach_rcprg.StateMachine.add('MoveToPlace', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                          transitions={'FINISHED': 'SayAskKeeperForGoods', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
                                                       'shutdown': 'shutdown'},
-                                         remapping={'goal': 'object_pose', 'susp_data': 'susp_data'})
+                                         remapping={'susp_data': 'susp_data', 'goal': 'place_pose'})
+
 
             smach_rcprg.StateMachine.add('SayAskKeeperForGoods', SayAskKeeperForGoods(sim_mode, conversation_interface, input_keys),
                                          transitions={'ok': 'MoveBack', 'preemption': 'PREEMPTED', 'error': 'FAILED',
                                                       'timeout': 'SayAskKeeperForGoods', 'shutdown': 'shutdown', 'unexpected_question': 'MoveBackAfterUnexpectedQuestion'},
-                                         remapping={'q_load_answer_id': 'q_load_answer_id'})
+                                         remapping={'q_load_answer_id': 'q_load_answer_id', 'item': 'item'})
 
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplexBlocking(sim_mode, conversation_interface, kb_places),
                                          transitions={'FINISHED': 'TellInfoFromKeeper', 'PREEMPTED': 'PREEMPTED', 'FAILED': 'FAILED',
@@ -466,7 +530,7 @@ class BringGoods(smach_rcprg.StateMachine):
 
             smach_rcprg.StateMachine.add('TellInfoFromKeeper', TellInfoFromKeeper(sim_mode, conversation_interface, input_keys),
                                          transitions={'restart': 'FINISHED', 'ok': 'SetHeightEnd', 'preemption': 'PREEMPTED', 'error': 'FAILED',
-                                                      'shutdown': 'shutdown', 'timeout': 'TellInfoFromKeeper', 'turn_around': 'TurnAroundB1', 'follow_up_answer': 'SetKeeperPose'},
+                                                      'shutdown': 'shutdown', 'timeout': 'TellInfoFromKeeper', 'turn_around': 'TurnAroundB1', 'follow_up_answer': 'MoveToPlace'},
                                          remapping={'q_load_answer_id': 'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('TurnAroundB1', navigation.RememberCurrentPose(sim_mode, conversation_interface),
