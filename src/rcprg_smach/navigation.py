@@ -491,8 +491,9 @@ class SetObjectPose(TaskER.BlockingState):
         return 'ok'
 
 class MoveTo(TaskER.SuspendableState):
-    def __init__(self, sim_mode, conversation_interface):
+    def __init__(self, sim_mode, conversation_interface, outcomes = ['ok', 'preemption', 'error', 'stall', 'shutdown']):
         assert sim_mode in ['sim', 'gazebo', 'real']
+        print(outcomes)
         self.current_pose = Pose()
         self.is_feedback_received = False
         self.move_base_status = GoalStatus.PENDING
@@ -501,7 +502,7 @@ class MoveTo(TaskER.SuspendableState):
         self.conversation_interface = conversation_interface
 
         TaskER.SuspendableState.__init__(self,
-                             outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
+                             outcomes = outcomes,
                              input_keys=['move_goal', 'susp_data'])
 
         self.description = u'Jadę'
