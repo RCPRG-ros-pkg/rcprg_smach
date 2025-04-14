@@ -122,7 +122,7 @@ class SayAskKeeperForGoods(TaskER.BlockingState):
                 self.service_preempt()
                 return 'preemption'
 
-            if all([item == self.tactile_table_item[0] for item in self.tactile_table_item[1:]]) and self.tactile_table_item[0] != 'nothing':
+            if all([item == self.tactile_table_item[0] for item in self.tactile_table_item[1:]]) and self.tactile_table_item[0] != 'nothing' and self.tactile_table_item[0] != '':
                 messages = [
                     {"role": "system", "content": self.get_gtp_request_message(userdata.item) }
                 ]
